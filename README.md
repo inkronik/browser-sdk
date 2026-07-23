@@ -20,7 +20,7 @@ import { createInkronikBrowser } from '@inkronik/browser'
 
 const inkronik = createInkronikBrowser({
     publicKey: 'ik_pub_...',
-    collectorUrl: 'https://collector.example.com',
+    collectorUrl: 'https://collector.inkronik.codemask.dev',
     tracePropagationOrigins: ['https://api.example.com'],
     user: {
         id: currentUser.uuid,
@@ -63,7 +63,7 @@ only for exact origins listed in `tracePropagationOrigins`:
 ```ts
 const inkronik = createInkronikBrowser({
     publicKey: 'ik_pub_...',
-    collectorUrl: 'https://collector.example.com',
+    collectorUrl: 'https://collector.inkronik.codemask.dev',
     tracePropagationOrigins: ['https://api.example.com'],
 })
 ```
