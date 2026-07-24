@@ -1,8 +1,8 @@
 {
-  "name": "@inkronik/browser",
+  "name": "@inkronik/browser-sdk",
   "version": "1.0.0",
   "description": "Privacy-first browser RUM, tracing, and product-event SDK for Inkronik.",
-  "license": "Apache-2.0",
+  "license": "MIT",
   "type": "module",
   "sideEffects": false,
   "files": [
@@ -27,6 +27,7 @@
     "check:format": "prettier --check .",
     "check:lint": "eslint src",
     "pack:check": "npm pack --dry-run",
+    "release": "release-it",
     "test": "bun test ./src",
     "typecheck": "bun tsc --noEmit --project tsconfig.json"
   },
@@ -46,7 +47,8 @@
     "telemetry",
     "tracing",
     "web-vitals",
-    "monitoring"
+    "monitoring",
+    "sdk"
   ],
   "publishConfig": {
     "access": "public",
@@ -57,6 +59,7 @@
     "eslint": "9.39.4",
     "eslint-config-codemask": "2.2.1",
     "prettier": "3.8.1",
+    "release-it": "20.2.1",
     "typescript": "5.9.3"
   },
   "packageManager": "bun@1.3.14"

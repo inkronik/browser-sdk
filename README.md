@@ -1,11 +1,11 @@
-# `@inkronik/browser`
+# `@inkronik/browser-sdk`
 
 Privacy-first browser RUM, distributed tracing, and product-event collection for Inkronik.
 
 ## Installation
 
 ```bash
-bun add @inkronik/browser
+bun add @inkronik/browser-sdk
 ```
 
 The package ships compiled, tree-shakeable ESM and TypeScript declarations. It has no runtime dependencies and is safe to import during server-side
@@ -16,7 +16,7 @@ rendering; browser instrumentation starts only when a client is constructed in a
 Create the client only after your application's consent policy permits telemetry:
 
 ```ts
-import { createInkronikBrowser } from '@inkronik/browser'
+import { createInkronikBrowser } from '@inkronik/browser-sdk'
 
 const inkronik = createInkronikBrowser({
     publicKey: 'ik_pub_...',
@@ -99,3 +99,7 @@ npm pack --dry-run
 ```
 
 See [RELEASING.md](./RELEASING.md) for the release process and [SECURITY.md](./SECURITY.md) for vulnerability reporting.
+
+## License
+
+MIT License. See [LICENSE](./LICENSE).
