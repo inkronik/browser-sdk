@@ -12,7 +12,7 @@ import { installBrowserInstrumentation } from './instrumentation.js'
 import type { BrowserEventType, BrowserSpan } from './protocol/types.js'
 import { sanitizeBrowserRoute, sanitizeBrowserUrl } from './sanitizer.js'
 import { resolveBrowserSession, resolveBrowserStorage } from './session.js'
-import { createChildBrowserTraceContext, createRootBrowserTraceContext, toBrowserTraceparent } from './trace-context.js'
+import { createRootBrowserTraceContext, toBrowserTraceparent } from './trace-context.js'
 import { sendBrowserBatch } from './transport.js'
 import type {
     BrowserAttributes,
@@ -317,7 +317,7 @@ export class InkronikBrowserClient {
             return this.fetchImpl(input, init)
         }
 
-        const context = createChildBrowserTraceContext(this.viewContext)
+        const context = createRootBrowserTraceContext()
         const sessionId = this.session.touch()
         const headers = new Headers(request.headers)
         headers.set('traceparent', toBrowserTraceparent(context))
