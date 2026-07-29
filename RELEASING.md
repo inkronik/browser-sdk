@@ -1,17 +1,21 @@
 # Releasing
 
-`@inkronik/browser-sdk` is released from the manually dispatched `Release` GitHub Actions workflow. Release It calculates the version, updates
-`package.json` and the SDK version embedded in `src/constants.ts`, creates the release commit and tag, pushes them, creates the GitHub Release,
-and only then publishes the package to npm.
+`@inkronik/browser-sdk` is released from the manually dispatched `Release` GitHub Actions workflow. Release It calculates the version from
+Conventional Commits, updates `package.json` and the SDK version embedded in `src/constants.ts`, creates the release commit and tag, pushes
+them, creates the GitHub Release, and only then publishes the package to npm.
 
 ## Workflow inputs
 
-- `increment`: `current`, `patch`, `minor`, or `major`. Use `current` only when the version already present in `package.json` has not been
-  published.
 - `branch`: `main` for stable releases or `rc` for prereleases.
 - `dry_run`: enabled by default. It validates the release without committing, tagging, pushing, creating a GitHub Release, or publishing to npm.
 
 The workflow reruns tests, typechecking, linting, formatting, the build, and package-content inspection before starting Release It.
+
+Release It selects the next version from commits since the previous tag:
+
+- `fix:` creates a patch release;
+- `feat:` creates a minor release;
+- a breaking change declared with `!` or `BREAKING CHANGE:` creates a major release.
 
 ## Bootstrap the npm package
 
@@ -19,7 +23,7 @@ npm requires the package to exist before a trusted publisher can be configured. 
 
 1. Keep the `NPM_TOKEN` repository or `npm` environment secret configured with an npm granular access token that can publish
    `@inkronik/browser-sdk`.
-2. Run the workflow from `main` with `increment: current` and `dry_run: true`.
+2. Make sure the release history contains at least one Conventional Commit, then run the workflow from `main` with `dry_run: true`.
 3. Review the output, then repeat with `dry_run: false`.
 
 The token is exposed only to the final release step and only for a non-dry run. Once Trusted Publishing works, delete `NPM_TOKEN`; the workflow
@@ -39,14 +43,14 @@ The GitHub `npm` environment may require reviewers. npm Trusted Publishing requi
 
 ## Stable releases
 
-Run the workflow from `main`, select `patch`, `minor`, or `major`, and first leave `dry_run` enabled. If the preview is correct, rerun it with
-`dry_run` disabled. The resulting npm package uses the `latest` dist-tag.
+Run the workflow from `main` and first leave `dry_run` enabled. If the automatically selected version is correct, rerun it with `dry_run`
+disabled. The resulting npm package uses the `latest` dist-tag.
 
 ## Release candidates
 
-Maintain an `rc` branch and dispatch the workflow with `branch: rc`. The first prerelease of a new line should use the desired increment and
-produces a version such as `1.1.0-rc.0`. Subsequent runs use `increment: current` and advance the prerelease number. RC packages use the `rc`
-dist-tag, so they do not replace the stable default.
+Maintain an `rc` branch and dispatch the workflow with `branch: rc`. The first prerelease of a new line derives its increment from Conventional
+Commits and produces a version such as `1.1.0-rc.0`. Subsequent runs advance the prerelease number. RC packages use the `rc` dist-tag, so they
+do not replace the stable default.
 
 After validating an RC, merge the intended release changes to `main` and run a stable release there. Do not merge the RC version commit into
 `main`.
