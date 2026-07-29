@@ -1,6 +1,6 @@
 {
   "name": "@inkronik/browser-sdk",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Privacy-first browser RUM, tracing, and product-event SDK for Inkronik.",
   "license": "MIT",
   "type": "module",
