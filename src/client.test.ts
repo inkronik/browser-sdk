@@ -4,7 +4,7 @@ import { InkronikBrowserClient } from './client.js'
 import type { BrowserFetch, BrowserIngestRequest } from './types.js'
 
 describe('InkronikBrowserClient fetch tracing', () => {
-    test('parents an allowlisted API request to the current view and propagates only traceparent', async () => {
+    test('starts an independent trace for each allowlisted API request and propagates only traceparent', async () => {
         const originalDescriptors = new Map(
             ['window', 'document', 'navigator', 'fetch', 'PerformanceObserver'].map(name => [
                 name,
@@ -77,23 +77,35 @@ describe('InkronikBrowserClient fetch tracing', () => {
                 headers: { Authorization: 'Bearer HEADER_SECRET', 'Content-Type': 'application/json' },
                 body: JSON.stringify({ inputValue: 'BODY_SECRET' }),
             })
+            await windowValue.fetch('https://api.example.com/operators', { method: 'GET' })
             await client.flush()
             await client.shutdown()
 
-            const apiRequest = apiRequests.at(0)
             const collectorRequest = collectorRequests.at(0)
             const body = (await collectorRequest?.json()) as BrowserIngestRequest
             const rootSpan = body.spans.find(span => span.span_kind === 'internal')
-            const clientSpan = body.spans.find(span => span.span_kind === 'client')
+            const clientSpans = body.spans.filter(span => span.span_kind === 'client')
+            const firstClientSpan = clientSpans.at(0)
+            const secondClientSpan = clientSpans.at(1)
             const serialized = JSON.stringify(body)
 
             expect(body.public_key).toBe(`ik_pub_${'a'.repeat(43)}`)
             expect(body.events.length + body.spans.length).toBeGreaterThan(0)
-            expect(apiRequest?.headers.get('traceparent')).toBe(`00-${clientSpan?.trace_id}-${clientSpan?.span_id}-01`)
-            expect(clientSpan?.trace_id).toBe(rootSpan?.trace_id)
-            expect(clientSpan?.parent_span_id).toBe(rootSpan?.span_id)
-            expect(clientSpan?.http_url).toBe('https://api.example.com/recordings')
-            expect(clientSpan?.user_id).toBe('user_42')
+            expect(clientSpans).toHaveLength(2)
+            expect(apiRequests.at(0)?.headers.get('traceparent')).toBe(`00-${firstClientSpan?.trace_id}-${firstClientSpan?.span_id}-01`)
+            expect(apiRequests.at(1)?.headers.get('traceparent')).toBe(`00-${secondClientSpan?.trace_id}-${secondClientSpan?.span_id}-01`)
+            expect(firstClientSpan?.trace_id).not.toBe(rootSpan?.trace_id)
+            expect(secondClientSpan?.trace_id).not.toBe(rootSpan?.trace_id)
+            expect(secondClientSpan?.trace_id).not.toBe(firstClientSpan?.trace_id)
+            expect(firstClientSpan?.parent_span_id).toBe('')
+            expect(secondClientSpan?.parent_span_id).toBe('')
+            expect(firstClientSpan?.view_id).toBe(rootSpan?.view_id)
+            expect(secondClientSpan?.view_id).toBe(rootSpan?.view_id)
+            expect(body.events.every(event => event.trace_id === rootSpan?.trace_id)).toBe(true)
+            expect(firstClientSpan?.http_url).toBe('https://api.example.com/recordings')
+            expect(secondClientSpan?.http_url).toBe('https://api.example.com/operators')
+            expect(firstClientSpan?.user_id).toBe('user_42')
+            expect(secondClientSpan?.user_id).toBe('user_42')
             expect(serialized).not.toContain('PAGE_SECRET')
             expect(serialized).not.toContain('QUERY_SECRET')
             expect(serialized).not.toContain('HEADER_SECRET')

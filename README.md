@@ -57,8 +57,9 @@ The SDK:
 
 ## Distributed tracing
 
-The SDK creates one trace per browser view and instruments `fetch`. Same-origin requests are traced by default. Cross-origin propagation happens
-only for exact origins listed in `tracePropagationOrigins`:
+The SDK creates a separate trace for every instrumented `fetch`. Browser view events retain their own view trace, while `view_id` and `session_id`
+correlate each request trace back to the view and session that initiated it. Same-origin requests are traced by default. Cross-origin propagation
+happens only for exact origins listed in `tracePropagationOrigins`:
 
 ```ts
 const inkronik = createInkronikBrowser({
@@ -68,8 +69,9 @@ const inkronik = createInkronikBrowser({
 })
 ```
 
-The injected W3C `traceparent` lets an instrumented backend continue the browser trace through server, database, messaging, and external-service
-spans. Collector requests are always excluded from fetch instrumentation.
+The injected W3C `traceparent` lets an instrumented backend continue that request's trace through server, database, messaging, and external-service
+spans. Separate requests never share a trace solely because they occurred in the same long-lived SPA view. Collector requests are always excluded
+from fetch instrumentation.
 
 Adding `traceparent` to a cross-origin request requires the target API's CORS policy to allow that request header. Send trace context only to
 services you trust; configured targets are normalized to exact origins.

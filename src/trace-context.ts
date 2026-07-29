@@ -12,10 +12,4 @@ export const createRootBrowserTraceContext = (): BrowserTraceContext => ({
     parentSpanId: '',
 })
 
-export const createChildBrowserTraceContext = (parent: BrowserTraceContext): BrowserTraceContext => ({
-    traceId: parent.traceId,
-    spanId: createHexIdentifier(8),
-    parentSpanId: parent.spanId,
-})
-
 export const toBrowserTraceparent = (context: BrowserTraceContext): string => `00-${context.traceId}-${context.spanId}-01`
