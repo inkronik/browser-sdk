@@ -1,6 +1,6 @@
-import type { BrowserAttributeValue, BrowserEvent, BrowserEventType, BrowserIngestRequest, BrowserSpan } from './protocol/types.js'
+import type { BrowserAttributeValue, BrowserEvent, BrowserEventType, BrowserIngestRequest, BrowserSpan, EventLevel } from './protocol/types.js'
 
-export type { BrowserAttributeValue, BrowserEvent, BrowserEventType, BrowserIngestRequest, BrowserSpan } from './protocol/types.js'
+export type { BrowserAttributeValue, BrowserEvent, BrowserEventType, BrowserIngestRequest, BrowserSpan, EventLevel } from './protocol/types.js'
 
 export type BrowserAttributes = Readonly<Record<string, BrowserAttributeValue>>
 export type BrowserFetch = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
@@ -25,8 +25,25 @@ export interface CreateInkronikBrowserOptions {
 
 export interface CaptureEventInput {
     readonly name: string
+    readonly level?: EventLevel
+    readonly message?: string
     readonly attributes?: BrowserAttributes
     readonly measurements?: Readonly<Record<string, number>>
+}
+
+export interface CaptureErrorOptions {
+    readonly name: string
+    readonly message?: string
+    readonly attributes?: BrowserAttributes
+    readonly measurements?: Readonly<Record<string, number>>
+}
+
+export interface CapturedError {
+    readonly type: string
+    readonly message: string
+    readonly stack: string
+    readonly code: string
+    readonly handled: boolean
 }
 
 export interface SetUserInput {
@@ -42,6 +59,9 @@ export interface NormalizedBrowserUserContext {
 export interface EnqueueBrowserEventInput {
     readonly eventType: BrowserEventType
     readonly name: string
+    readonly level?: EventLevel
+    readonly message?: string
+    readonly error?: CapturedError
     readonly attributes?: BrowserAttributes
     readonly measurements?: Readonly<Record<string, number>>
 }

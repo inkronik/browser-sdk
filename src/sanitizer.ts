@@ -17,6 +17,8 @@ import type { BrowserAttributeValue } from './protocol/types.js'
 import type { BrowserAttributes } from './types.js'
 
 const normalizeKey = (value: string): string => value.toLowerCase().replaceAll(/[^a-z0-9]+/g, '_')
+const freeformSecretPattern =
+    /((?:password|passwd|passphrase|secret|token|api[_-]?key|access[_-]?key|private[_-]?key|client[_-]?secret|refresh[_-]?token|id[_-]?token|jwt|credential|signature|session|cookie|card[_-]?number|credit[_-]?card|cvv|cvc|ssn)\s*[:=]\s*)([^&\s,"'}]+)/gi
 
 export const isSensitiveBrowserKey = (key: string): boolean => {
     const normalized = normalizeKey(key)
@@ -30,6 +32,8 @@ export const redactBrowserValue = (value: string): string =>
         .replaceAll(EMAIL_PATTERN, REDACTED_VALUE)
         .replaceAll(PHONE_PATTERN, REDACTED_VALUE)
         .replaceAll(CARD_PATTERN, REDACTED_VALUE)
+
+export const redactBrowserErrorValue = (value: string): string => redactBrowserValue(value).replaceAll(freeformSecretPattern, `$1${REDACTED_VALUE}`)
 
 const sanitizeValue = ({ key, value }: { readonly key: string; readonly value: BrowserAttributeValue }): BrowserAttributeValue => {
     const isFreeformErrorValue = key === 'message' || key === 'stack' || key === 'reason'

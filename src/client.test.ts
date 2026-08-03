@@ -72,6 +72,12 @@ describe('InkronikBrowserClient fetch tracing', () => {
                 user: { id: 'user_42' },
             })
 
+            client.captureError(new Error('Checkout failed for person@example.com'), {
+                name: 'checkout_failed',
+                message: 'Checkout stayed open for retry',
+                attributes: { plan: 'pro' },
+            })
+
             await windowValue.fetch('https://api.example.com/recordings?token=QUERY_SECRET', {
                 method: 'POST',
                 headers: { Authorization: 'Bearer HEADER_SECRET', 'Content-Type': 'application/json' },
@@ -87,6 +93,7 @@ describe('InkronikBrowserClient fetch tracing', () => {
             const clientSpans = body.spans.filter(span => span.span_kind === 'client')
             const firstClientSpan = clientSpans.at(0)
             const secondClientSpan = clientSpans.at(1)
+            const handledError = body.events.find(event => event.name === 'checkout_failed')
             const serialized = JSON.stringify(body)
 
             expect(body.public_key).toBe(`ik_pub_${'a'.repeat(43)}`)
@@ -102,6 +109,16 @@ describe('InkronikBrowserClient fetch tracing', () => {
             expect(firstClientSpan?.view_id).toBe(rootSpan?.view_id)
             expect(secondClientSpan?.view_id).toBe(rootSpan?.view_id)
             expect(body.events.every(event => event.trace_id === rootSpan?.trace_id)).toBe(true)
+            expect(handledError).toMatchObject({
+                level: 'error',
+                message: 'Checkout stayed open for retry',
+                user_id: 'user_42',
+                error_type: 'Error',
+                error_message: 'Checkout failed for [REDACTED]',
+                error_handled: true,
+                attributes: { plan: 'pro' },
+            })
+            expect(handledError?.error_stack).toContain('Error: Checkout failed for [REDACTED]')
             expect(firstClientSpan?.http_url).toBe('https://api.example.com/recordings')
             expect(secondClientSpan?.http_url).toBe('https://api.example.com/operators')
             expect(firstClientSpan?.user_id).toBe('user_42')

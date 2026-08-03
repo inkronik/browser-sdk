@@ -1,16 +1,60 @@
+import { MAX_ERROR_VALUE_LENGTH, MAX_EVENT_MESSAGE_LENGTH } from './constants.js'
 import type { BrowserEvent, BrowserSpan } from './protocol/types.js'
-import { redactBrowserValue, sanitizeBrowserAttributes, sanitizeBrowserRoute, sanitizeBrowserUrl } from './sanitizer.js'
+import { redactBrowserErrorValue, redactBrowserValue, sanitizeBrowserAttributes, sanitizeBrowserRoute, sanitizeBrowserUrl } from './sanitizer.js'
 import type {
     BuildBrowserEventInput,
     BuildBrowserSpanInput,
     BrowserEnvironment,
     BrowserFetch,
+    CapturedError,
     NormalizedBrowserUserContext,
     ResolveBrowserFetchInput,
     ResolveTracePropagationOriginsInput,
     SetUserInput,
     ShouldTraceBrowserRequestInput,
 } from './types.js'
+
+const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> => typeof value === 'object' && value !== null && !Array.isArray(value)
+
+const safeString = (value: unknown): string => {
+    try {
+        return String(value)
+    } catch {
+        return '[unserializable thrown value]'
+    }
+}
+
+const errorProperty = ({ error, property }: { readonly error: unknown; readonly property: string }): string => {
+    if (!isRecord(error)) {
+        return ''
+    }
+
+    const value = (() => {
+        try {
+            return Reflect.get(error, property) as unknown
+        } catch {
+            return undefined
+        }
+    })()
+
+    return typeof value === 'string' || typeof value === 'number' ? safeString(value) : ''
+}
+
+export const normalizeCapturedBrowserError = (error: unknown): CapturedError => {
+    const capturedType = errorProperty({ error, property: 'name' })
+    const capturedMessage = errorProperty({ error, property: 'message' })
+    const errorType = capturedType === '' ? (error instanceof Error ? 'Error' : 'NonError') : capturedType
+    const errorMessage = capturedMessage === '' ? safeString(error) : capturedMessage
+    const errorStack = errorProperty({ error, property: 'stack' })
+
+    return {
+        type: redactBrowserValue(errorType.slice(0, 255)),
+        message: redactBrowserErrorValue(errorMessage.slice(0, MAX_ERROR_VALUE_LENGTH)),
+        stack: redactBrowserErrorValue(errorStack.slice(0, MAX_ERROR_VALUE_LENGTH)),
+        code: redactBrowserValue(errorProperty({ error, property: 'code' }).slice(0, 255)),
+        handled: true,
+    }
+}
 
 export const createUuid = (): string => crypto.randomUUID()
 
@@ -63,6 +107,9 @@ export const buildBrowserEvent = ({
     attributes,
     defaultAttributes,
     eventType,
+    error,
+    level,
+    message,
     measurements,
     name,
     pageUrl,
@@ -76,6 +123,8 @@ export const buildBrowserEvent = ({
     event_id: createUuid(),
     event_type: eventType,
     name: name.slice(0, 100),
+    level: level ?? (eventType === 'javascript_error' || eventType === 'unhandled_rejection' ? 'error' : 'info'),
+    message: redactBrowserErrorValue((message ?? '').slice(0, MAX_EVENT_MESSAGE_LENGTH)),
     timestamp: new Date().toISOString(),
     session_id: sessionId,
     view_id: viewId,
@@ -84,6 +133,11 @@ export const buildBrowserEvent = ({
     user_id: redactBrowserValue(userId.slice(0, 255)),
     trace_id: traceId,
     span_id: spanId,
+    error_type: error?.type ?? '',
+    error_message: error?.message ?? '',
+    error_stack: error?.stack ?? '',
+    error_code: error?.code ?? '',
+    error_handled: error?.handled ?? false,
     attributes: sanitizeBrowserAttributes({ ...defaultAttributes, ...attributes }),
     measurements: Object.fromEntries(
         Object.entries(measurements ?? {})

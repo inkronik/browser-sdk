@@ -1,5 +1,11 @@
 import { describe, expect, test } from 'bun:test'
-import { buildBrowserEvent, deterministicSample, normalizeBrowserUserContext, shouldTraceBrowserRequest } from './utils.js'
+import {
+    buildBrowserEvent,
+    deterministicSample,
+    normalizeBrowserUserContext,
+    normalizeCapturedBrowserError,
+    shouldTraceBrowserRequest,
+} from './utils.js'
 
 describe('browser SDK event construction', () => {
     test('sanitizes explicit identity, route, and custom attributes before transport', () => {
@@ -22,11 +28,32 @@ describe('browser SDK event construction', () => {
         const serialized = JSON.stringify(event)
 
         expect(event.route).toBe('/checkout')
+        expect(event.level).toBe('info')
+        expect(event.message).toBe('')
         expect(event.user_id).toBe('[REDACTED]')
         expect(event.attributes.input_value).toBe('[REDACTED]')
         expect(serialized).not.toContain('ROUTE_CANARY')
         expect(serialized).not.toContain('FORM_CANARY')
         expect(serialized).not.toContain('person@example.com')
+    })
+
+    test('normalizes handled errors without copying arbitrary properties', () => {
+        const error = Object.assign(new Error('Payment token=SECRET failed for person@example.com'), {
+            code: 'PAYMENT_TIMEOUT',
+            providerResponse: 'must-not-be-captured',
+        })
+        const normalized = normalizeCapturedBrowserError(error)
+
+        expect(normalized).toMatchObject({
+            type: 'Error',
+            message: 'Payment token=[REDACTED] failed for [REDACTED]',
+            code: 'PAYMENT_TIMEOUT',
+            handled: true,
+        })
+        expect(normalized.stack).toContain('Error: Payment token=[REDACTED] failed for [REDACTED]')
+        expect(JSON.stringify(normalized)).not.toContain('must-not-be-captured')
+        expect(JSON.stringify(normalized)).not.toContain('SECRET')
+        expect(JSON.stringify(normalized)).not.toContain('person@example.com')
     })
 
     test('samples deterministically per anonymous session', () => {
