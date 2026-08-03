@@ -28,7 +28,22 @@ const inkronik = createInkronikBrowser({
     },
 })
 
-inkronik.capture({ name: 'checkout_started', attributes: { plan: 'pro' } })
+inkronik.capture({
+    name: 'checkout_started',
+    level: 'info',
+    message: 'Customer entered checkout',
+    attributes: { plan: 'pro' },
+})
+
+try {
+    await submitCheckout()
+} catch (error) {
+    inkronik.captureError(error, {
+        name: 'checkout_submit_failed',
+        message: 'Checkout stayed open so the customer can retry',
+        attributes: { plan: 'pro' },
+    })
+}
 
 // Authentication state can change after initialization.
 inkronik.setUser({ id: currentUser.uuid, attributes: { role: currentUser.role } })
@@ -45,6 +60,10 @@ The public key is a revocable source identifier, not a secret. It can send only 
 Use one stable, opaque user ID across the browser and backend, ideally the authentication `sub` or UUID. Matching identifiers let RUM, product
 events, request captures, logs, and traces be queried for the same user. Do not use an email address, name, phone number, or raw token as the ID.
 User attributes are stored as `user.*`; sensitive keys and values are redacted in both the SDK and Collector.
+
+Custom events support `info`, `warning`, and `error` levels and default to `info`. `captureError` records a handled error with its bounded type,
+message, stack, and string code when available. Error text and stacks pass through browser redaction; production stacks remain minified unless the
+deployment has a separate source-map symbolication pipeline.
 
 The SDK:
 

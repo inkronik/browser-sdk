@@ -1,10 +1,13 @@
 export type BrowserEventType = 'page_view' | 'navigation' | 'web_vital' | 'javascript_error' | 'unhandled_rejection' | 'custom'
+export type EventLevel = 'info' | 'warning' | 'error'
 export type BrowserAttributeValue = string | number | boolean
 
 export interface BrowserEvent {
     readonly event_id: string
     readonly event_type: BrowserEventType
     readonly name: string
+    readonly level: EventLevel
+    readonly message: string
     readonly timestamp: string
     readonly session_id: string
     readonly view_id: string
@@ -13,6 +16,11 @@ export interface BrowserEvent {
     readonly user_id: string
     readonly trace_id: string
     readonly span_id: string
+    readonly error_type: string
+    readonly error_message: string
+    readonly error_stack: string
+    readonly error_code: string
+    readonly error_handled: boolean
     readonly attributes: Readonly<Record<string, BrowserAttributeValue>>
     readonly measurements: Readonly<Record<string, number>>
 }

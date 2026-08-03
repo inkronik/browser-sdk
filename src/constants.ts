@@ -13,6 +13,7 @@ export const REDACTED_VALUE = '[REDACTED]'
 export const MAX_ATTRIBUTES = 32
 export const MAX_ATTRIBUTE_KEY_LENGTH = 64
 export const MAX_ATTRIBUTE_VALUE_LENGTH = 512
+export const MAX_EVENT_MESSAGE_LENGTH = 1024
 export const MAX_ERROR_VALUE_LENGTH = 4096
 export const INKRONIK_ORIGINAL_BROWSER_FETCH = Symbol.for('inkronik.browser.originalFetch')
 

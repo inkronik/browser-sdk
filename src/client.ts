@@ -20,6 +20,7 @@ import type {
     BrowserQueueItem,
     BrowserTransportBatch,
     BrowserViewContext,
+    CaptureErrorOptions,
     CaptureEventInput,
     CompleteBrowserFetchSpanInput,
     CreateInkronikBrowserOptions,
@@ -32,6 +33,7 @@ import {
     createUuid,
     deterministicSample,
     normalizeBrowserUserContext,
+    normalizeCapturedBrowserError,
     normalizeCollectorUrl,
     resolveBrowserEnvironment,
     resolveBrowserFetch,
@@ -135,7 +137,26 @@ export class InkronikBrowserClient {
     }
 
     capture(input: CaptureEventInput): void {
-        this.enqueue({ eventType: 'custom', name: input.name, attributes: input.attributes, measurements: input.measurements })
+        this.enqueue({
+            eventType: 'custom',
+            name: input.name,
+            level: input.level,
+            message: input.message,
+            attributes: input.attributes,
+            measurements: input.measurements,
+        })
+    }
+
+    captureError(error: unknown, options: CaptureErrorOptions): void {
+        this.enqueue({
+            eventType: 'custom',
+            name: options.name,
+            level: 'error',
+            message: options.message,
+            error: normalizeCapturedBrowserError(error),
+            attributes: options.attributes,
+            measurements: options.measurements,
+        })
     }
 
     setUser(input: SetUserInput): void {
