@@ -17,17 +17,13 @@ Release It selects the next version from commits since the previous tag:
 - `feat:` creates a minor release;
 - a breaking change declared with `!` or `BREAKING CHANGE:` creates a major release.
 
-## Bootstrap the npm package
+## npm publication
 
-npm requires the package to exist before a trusted publisher can be configured. For the first release:
+The release workflow publishes exclusively through npm Trusted Publishing and GitHub Actions OIDC. It does not read an `NPM_TOKEN` or export
+`NODE_AUTH_TOKEN`. The job runs on a GitHub-hosted runner with `id-token: write`, Node 24, npm 11.18, and the protected `npm` environment.
 
-1. Keep the `NPM_TOKEN` repository or `npm` environment secret configured with an npm granular access token that can publish
-   `@inkronik/browser-sdk`.
-2. Make sure the release history contains at least one Conventional Commit, then run the workflow from `main` with `dry_run: true`.
-3. Review the output, then repeat with `dry_run: false`.
-
-The token is exposed only to the final release step and only for a non-dry run. Once Trusted Publishing works, delete `NPM_TOKEN`; the workflow
-will publish through GitHub Actions OIDC.
+Remove any obsolete `NPM_TOKEN` repository or environment secret and revoke the corresponding npm automation token. If private npm dependencies
+are added later, use a separate read-only token only on the dependency-install step; the publish step must remain tokenless.
 
 ## One-time trusted-publisher configuration
 
@@ -37,9 +33,11 @@ After the bootstrap version exists, configure its npm trusted publisher with the
 - organisation or user: `inkronik`;
 - repository: `browser-sdk`;
 - workflow filename: `release.yaml`;
-- environment: `npm`.
+- environment: `npm`;
+- allowed action: `npm publish`.
 
-The GitHub `npm` environment may require reviewers. npm Trusted Publishing requires a GitHub-hosted runner.
+The GitHub `npm` environment may require reviewers. npm Trusted Publishing requires a GitHub-hosted runner and generates provenance automatically.
+The package repository URL, workflow filename, and environment must match this configuration exactly.
 
 ## Stable releases
 
