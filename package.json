@@ -27,7 +27,7 @@
     "check:format": "prettier --check .",
     "check:lint": "eslint src",
     "pack:check": "npm pack --dry-run",
-    "release": "release-it",
+    "release:version": "release-it --release-version --ci",
     "test": "bun test ./src",
     "typecheck": "bun tsc --noEmit --project tsconfig.json"
   },
