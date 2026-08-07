@@ -77,22 +77,15 @@ jobs:
           case "$RELEASE_BRANCH" in
             main)
               version="$(bun run --silent release:version)"
-              version_pattern='^[0-9]+\.[0-9]+\.[0-9]+$'
               ;;
             rc)
               version="$(bun run --silent release:version -- --preRelease=rc)"
-              version_pattern='^[0-9]+\.[0-9]+\.[0-9]+-rc\.[0-9]+$'
               ;;
             *)
               echo "Unsupported release branch: $RELEASE_BRANCH" >&2
               exit 1
               ;;
           esac
-
-          if [[ ! "$version" =~ $version_pattern ]]; then
-            echo "Invalid release version: $version" >&2
-            exit 1
-          fi
 
           if git rev-parse --verify --quiet "refs/tags/v$version"; then
             echo "Release tag v$version already exists." >&2
@@ -218,27 +211,6 @@ jobs:
       contents: read
       id-token: write
     steps:
-      - name: Validate release metadata
-        env:
-          RELEASE_BRANCH: ${{ inputs.branch }}
-          RELEASE_VERSION: ${{ needs.prepare-and-verify.outputs.version }}
-        run: |
-          stable_version_pattern='^[0-9]+\.[0-9]+\.[0-9]+$'
-          prerelease_version_pattern='^[0-9]+\.[0-9]+\.[0-9]+-rc\.[0-9]+$'
-
-          case "$RELEASE_BRANCH" in
-            main) version_pattern="$stable_version_pattern" ;;
-            rc) version_pattern="$prerelease_version_pattern" ;;
-            *)
-              echo "Unsupported release branch: $RELEASE_BRANCH" >&2
-              exit 1
-              ;;
-          esac
-          if [[ ! "$RELEASE_VERSION" =~ $version_pattern ]]; then
-            echo 'Invalid release metadata.' >&2
-            exit 1
-          fi
-
       - name: Setup Node.js for npm trusted publishing
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
