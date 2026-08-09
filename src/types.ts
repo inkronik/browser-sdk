@@ -4,6 +4,7 @@ export type { BrowserAttributeValue, BrowserEvent, BrowserEventType, BrowserInge
 
 export type BrowserAttributes = Readonly<Record<string, BrowserAttributeValue>>
 export type BrowserFetch = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
+export type BrowserUrlSanitizer = (url: URL) => string
 
 export interface CreateInkronikBrowserOptions {
     readonly publicKey: string
@@ -17,7 +18,7 @@ export interface CreateInkronikBrowserOptions {
     readonly fetchImpl?: BrowserFetch
     readonly onError?: (error: Error) => void
     readonly getRoute?: () => string
-    readonly sanitizeUrl?: (url: URL) => string
+    readonly sanitizeUrl?: BrowserUrlSanitizer
     readonly user?: SetUserInput
     readonly enableFetchTracing?: boolean
     readonly tracePropagationOrigins?: ReadonlyArray<string>
