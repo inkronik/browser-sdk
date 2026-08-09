@@ -242,4 +242,4 @@ jobs:
           else
             npm_tag=latest
           fi
-          npm publish release/package.tgz --access public --tag "$npm_tag" --ignore-scripts
+          npm publish ./release/package.tgz --access public --tag "$npm_tag" --ignore-scripts
