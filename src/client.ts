@@ -10,7 +10,7 @@ import {
 } from './constants.js'
 import { installBrowserInstrumentation } from './instrumentation.js'
 import type { BrowserEventType, BrowserSpan } from './protocol/types.js'
-import { sanitizeBrowserRoute, sanitizeBrowserUrl } from './sanitizer.js'
+import { createPrivacyPreservingUrlSanitizer, sanitizeBrowserRoute } from './sanitizer.js'
 import { resolveBrowserSession, resolveBrowserStorage } from './session.js'
 import { createRootBrowserTraceContext, toBrowserTraceparent } from './trace-context.js'
 import { sendBrowserBatch } from './transport.js'
@@ -115,7 +115,7 @@ export class InkronikBrowserClient {
         this.fetchImpl = resolveBrowserFetch({ configuredFetch: options.fetchImpl, environment: this.environment })
         this.onError = options.onError ?? (() => undefined)
         this.getRoute = options.getRoute ?? (() => this.environment?.location.pathname ?? '')
-        this.sanitizeUrl = options.sanitizeUrl ?? (url => sanitizeBrowserUrl(url.toString()))
+        this.sanitizeUrl = createPrivacyPreservingUrlSanitizer(options.sanitizeUrl)
         this.enableFetchTracing = options.enableFetchTracing ?? true
         this.tracePropagationOrigins = resolveTracePropagationOrigins({
             environment: this.environment,

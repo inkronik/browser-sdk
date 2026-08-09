@@ -1,5 +1,5 @@
-import { describe, expect, test } from 'bun:test'
-import { sanitizeBrowserAttributes, sanitizeBrowserRoute, sanitizeBrowserUrl } from './sanitizer.js'
+import { describe, expect, mock, test } from 'bun:test'
+import { createPrivacyPreservingUrlSanitizer, sanitizeBrowserAttributes, sanitizeBrowserRoute, sanitizeBrowserUrl } from './sanitizer.js'
 
 describe('browser SDK sanitization', () => {
     test('never forwards input-like or secret attributes', () => {
@@ -25,6 +25,47 @@ describe('browser SDK sanitization', () => {
 
     test('drops URL credentials, query strings, and fragments', () => {
         expect(sanitizeBrowserUrl('https://user:secret@example.com/checkout?token=secret#person@example.com')).toBe('https://example.com/checkout')
+    })
+
+    test('enforces baseline privacy before invoking custom URL sanitization', () => {
+        const customSanitizer = mock((url: URL) => url.toString())
+        const sanitizeUrl = createPrivacyPreservingUrlSanitizer(customSanitizer)
+
+        expect(sanitizeUrl(new URL('https://user:password@example.com/reset-password?token=SECRET#private'))).toBe(
+            'https://example.com/reset-password',
+        )
+        expect(customSanitizer.mock.calls.at(0)?.at(0)?.toString()).toBe('https://example.com/reset-password')
+    })
+
+    test('prevents custom URL sanitization from reintroducing sensitive URL components', () => {
+        const sanitizeUrl = createPrivacyPreservingUrlSanitizer(() => 'https://user:password@example.com/reset-password?token=reintroduced#private')
+
+        expect(sanitizeUrl(new URL('https://example.com/reset-password'))).toBe('https://example.com/reset-password')
+    })
+
+    test('allows custom URL sanitization to increase path privacy', () => {
+        const sanitizeUrl = createPrivacyPreservingUrlSanitizer(url => url.toString().replace('/users/alice/', '/users/redacted/'))
+
+        expect(sanitizeUrl(new URL('https://example.com/users/alice/profile?token=SECRET'))).toBe('https://example.com/users/redacted/profile')
+    })
+
+    test('fails closed when custom URL sanitization throws or returns an unsafe value', () => {
+        const url = new URL('https://example.com/reset-password?token=SECRET')
+        const throwingSanitizer = createPrivacyPreservingUrlSanitizer(() => {
+            throw new Error('custom sanitizer failed')
+        })
+
+        expect(throwingSanitizer(url)).toBe('')
+        expect(createPrivacyPreservingUrlSanitizer(() => '')(url)).toBe('')
+        expect(createPrivacyPreservingUrlSanitizer(() => 'not a URL')(url)).toBe('')
+        expect(createPrivacyPreservingUrlSanitizer(() => 'data:text/plain,SECRET')(url)).toBe('')
+    })
+
+    test('omits non-HTTP URLs instead of exposing opaque payloads', () => {
+        expect(() => sanitizeBrowserUrl('not a URL')).toThrow()
+        expect(sanitizeBrowserUrl('file:///Users/person/private.txt')).toBe('')
+        expect(sanitizeBrowserUrl('data:text/plain,SECRET')).toBe('')
+        expect(sanitizeBrowserUrl('javascript:SECRET')).toBe('')
     })
 
     test('normalizes identifier route segments without collapsing semantic slugs', () => {

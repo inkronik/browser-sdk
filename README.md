@@ -74,6 +74,11 @@ The SDK:
   unavailable;
 - accepts only primitive custom attribute values and sanitizes them before transport.
 
+The SDK always applies its baseline URL privacy sanitization before and after the optional `sanitizeUrl` callback. The callback receives an HTTP(S)
+URL with credentials, query strings, fragments, and identifier-like path segments already removed, and can apply additional path redaction. If the
+callback throws or returns an empty, invalid, or non-HTTP(S) URL, the SDK omits the page URL rather than falling back to the original value. This is
+structural data minimization, not general secret detection: applications should still avoid putting sensitive data in URL paths.
+
 ## Distributed tracing
 
 The SDK creates a separate trace for every instrumented `fetch`. Browser view events retain their own view trace, while `view_id` and `session_id`

@@ -14,7 +14,7 @@ import {
     TOKEN_PATTERN,
 } from './constants.js'
 import type { BrowserAttributeValue } from './protocol/types.js'
-import type { BrowserAttributes } from './types.js'
+import type { BrowserAttributes, BrowserUrlSanitizer } from './types.js'
 
 const normalizeKey = (value: string): string => value.toLowerCase().replaceAll(/[^a-z0-9]+/g, '_')
 const freeformSecretPattern =
@@ -69,9 +69,30 @@ export const sanitizeBrowserAttributes = (attributes: BrowserAttributes): Browse
 
 export const sanitizeBrowserUrl = (value: string): string => {
     const parsed = new URL(value)
+    const isSupportedProtocol = parsed.protocol === 'http:' || parsed.protocol === 'https:'
+
+    if (!isSupportedProtocol) {
+        return ''
+    }
 
     return `${parsed.origin}${sanitizeBrowserRoute(parsed.pathname)}`
 }
+
+export const createPrivacyPreservingUrlSanitizer =
+    (customSanitizer: BrowserUrlSanitizer | undefined): BrowserUrlSanitizer =>
+    url => {
+        try {
+            const baselineUrl = sanitizeBrowserUrl(url.toString())
+
+            if (customSanitizer === undefined) {
+                return baselineUrl
+            }
+
+            return sanitizeBrowserUrl(customSanitizer(new URL(baselineUrl)))
+        } catch {
+            return ''
+        }
+    }
 
 const isIdentifierRouteSegment = (segment: string): boolean =>
     ROUTE_UUID_SEGMENT_PATTERN.test(segment) ||
