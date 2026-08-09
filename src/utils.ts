@@ -58,14 +58,26 @@ export const normalizeCapturedBrowserError = (error: unknown): CapturedError => 
 
 export const createUuid = (): string => crypto.randomUUID()
 
-export const normalizeCollectorUrl = (value: string): string => value.replace(/\/+$/u, '')
+const trimTrailingSlashes = (value: string): string => {
+    // eslint-disable-next-line functional/no-let -- A mutable cursor guarantees a linear scan without an attacker-sized intermediate allocation.
+    let endIndex = value.length
+
+    // eslint-disable-next-line functional/no-loop-statements -- The bounded reverse scan replaces a polynomial regular expression.
+    while (endIndex > 0 && value.at(endIndex - 1) === '/') {
+        endIndex -= 1
+    }
+
+    return value.slice(0, endIndex)
+}
+
+export const normalizeCollectorUrl = trimTrailingSlashes
 
 export const resolveTracePropagationOrigins = ({ environment, configuredOrigins }: ResolveTracePropagationOriginsInput): ReadonlySet<string> =>
     new Set([...(environment === null ? [] : [environment.location.origin]), ...(configuredOrigins ?? []).map(origin => new URL(origin).origin)])
 
 export const shouldTraceBrowserRequest = ({ collectorUrl, requestUrl, tracePropagationOrigins }: ShouldTraceBrowserRequestInput): boolean => {
     const collector = new URL(collectorUrl)
-    const collectorPath = collector.pathname.replace(/\/+$/u, '')
+    const collectorPath = trimTrailingSlashes(collector.pathname)
     const isCollectorRequest = requestUrl.origin === collector.origin && requestUrl.pathname.startsWith(`${collectorPath}/v1/browser`)
 
     return !isCollectorRequest && tracePropagationOrigins.has(requestUrl.origin)
