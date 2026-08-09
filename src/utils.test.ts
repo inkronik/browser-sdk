@@ -4,10 +4,18 @@ import {
     deterministicSample,
     normalizeBrowserUserContext,
     normalizeCapturedBrowserError,
+    normalizeCollectorUrl,
     shouldTraceBrowserRequest,
 } from './utils.js'
 
 describe('browser SDK event construction', () => {
+    test('normalizes collector URLs without regex backtracking', () => {
+        expect(normalizeCollectorUrl('https://collector.inkronik.example///')).toBe('https://collector.inkronik.example')
+        expect(normalizeCollectorUrl('https://collector.inkronik.example/path//')).toBe('https://collector.inkronik.example/path')
+        expect(normalizeCollectorUrl('https://collector.inkronik.example/path')).toBe('https://collector.inkronik.example/path')
+        expect(normalizeCollectorUrl('/'.repeat(100_000))).toBe('')
+    })
+
     test('sanitizes explicit identity, route, and custom attributes before transport', () => {
         const event = buildBrowserEvent({
             eventType: 'custom',
@@ -93,5 +101,12 @@ describe('browser SDK event construction', () => {
         expect(shouldTraceBrowserRequest({ ...input, requestUrl: new URL('https://api.example.com/orders?token=secret') })).toBe(true)
         expect(shouldTraceBrowserRequest({ ...input, requestUrl: new URL('https://evil.example.com/orders') })).toBe(false)
         expect(shouldTraceBrowserRequest({ ...input, requestUrl: new URL('https://collector.inkronik.example/v1/browser') })).toBe(false)
+        expect(
+            shouldTraceBrowserRequest({
+                ...input,
+                collectorUrl: 'https://collector.inkronik.example///',
+                requestUrl: new URL('https://collector.inkronik.example/v1/browser'),
+            }),
+        ).toBe(false)
     })
 })
