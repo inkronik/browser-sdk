@@ -5,10 +5,17 @@ import {
     normalizeBrowserUserContext,
     normalizeCapturedBrowserError,
     normalizeCollectorUrl,
+    normalizeTelemetryEnvironment,
     shouldTraceBrowserRequest,
 } from './utils.js'
 
 describe('browser SDK event construction', () => {
+    test('normalizes a deployment environment to its canonical telemetry slug', () => {
+        expect(normalizeTelemetryEnvironment(' Development ')).toBe('development')
+        expect(() => normalizeTelemetryEnvironment('production/eu')).toThrow(TypeError)
+        expect(() => normalizeTelemetryEnvironment('')).toThrow(TypeError)
+    })
+
     test('normalizes collector URLs without regex backtracking', () => {
         expect(normalizeCollectorUrl('https://collector.inkronik.example///')).toBe('https://collector.inkronik.example')
         expect(normalizeCollectorUrl('https://collector.inkronik.example/path//')).toBe('https://collector.inkronik.example/path')

@@ -14,6 +14,7 @@ describe('browser transport', () => {
         const result = await sendBrowserBatch({
             collectorUrl: 'https://collector.inkronik.example',
             publicKey: `ik_pub_${'a'.repeat(43)}`,
+            environment: 'development',
             events: [],
             spans: [
                 {
@@ -52,6 +53,7 @@ describe('browser transport', () => {
         expect(request?.headers.get('content-type')).toBe('application/json')
         expect(body).toMatchObject({
             public_key: `ik_pub_${'a'.repeat(43)}`,
+            environment: 'development',
             events: [],
             spans: [{ trace_id: 'a'.repeat(32), span_id: 'b'.repeat(16), parent_span_id: 'c'.repeat(16) }],
         })

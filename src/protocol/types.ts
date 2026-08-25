@@ -50,6 +50,7 @@ export interface BrowserSpan {
 
 export interface BrowserIngestRequest {
     readonly public_key: string
+    readonly environment: string
     readonly events: ReadonlyArray<BrowserEvent>
     readonly spans: ReadonlyArray<BrowserSpan>
 }

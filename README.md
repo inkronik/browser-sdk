@@ -21,6 +21,7 @@ import { createInkronikBrowser } from '@inkronik/browser-sdk'
 const inkronik = createInkronikBrowser({
     publicKey: 'ik_pub_...',
     collectorUrl: 'https://collector.inkronik.codemask.dev',
+    environment: 'production',
     tracePropagationOrigins: ['https://api.example.com'],
     user: {
         id: currentUser.uuid,
@@ -54,6 +55,8 @@ await inkronik.shutdown()
 ```
 
 The public key is a revocable source identifier, not a secret. It can send only browser RUM, constrained browser spans, and custom events.
+The required `environment` option identifies the deployment sending each batch. The same application-scoped public key may therefore be used by
+multiple exact origins while development, staging, and production telemetry remain separate.
 
 ## Identity and privacy
 
@@ -89,6 +92,7 @@ happens only for exact origins listed in `tracePropagationOrigins`:
 const inkronik = createInkronikBrowser({
     publicKey: 'ik_pub_...',
     collectorUrl: 'https://collector.inkronik.codemask.dev',
+    environment: 'production',
     tracePropagationOrigins: ['https://api.example.com'],
 })
 ```
