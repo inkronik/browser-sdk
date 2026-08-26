@@ -35,6 +35,7 @@ import {
     normalizeBrowserUserContext,
     normalizeCapturedBrowserError,
     normalizeCollectorUrl,
+    normalizeTelemetryEnvironment,
     resolveBrowserEnvironment,
     resolveBrowserFetch,
     resolveTracePropagationOrigins,
@@ -77,6 +78,7 @@ const getBrowserAttributes = (userAgent: string): BrowserAttributes => {
 export class InkronikBrowserClient {
     private readonly publicKey: string
     private readonly collectorUrl: string
+    private readonly telemetryEnvironment: string
     private readonly sampleRate: number
     private readonly defaultAttributes: BrowserAttributes
     private readonly maxBatchSize: number
@@ -104,6 +106,7 @@ export class InkronikBrowserClient {
     constructor(options: CreateInkronikBrowserOptions) {
         this.publicKey = options.publicKey
         this.collectorUrl = normalizeCollectorUrl(options.collectorUrl)
+        this.telemetryEnvironment = normalizeTelemetryEnvironment(options.environment)
         this.sampleRate = options.sampleRate ?? DEFAULT_SAMPLE_RATE
         this.defaultAttributes = {
             ...(this.environment === null ? {} : getBrowserAttributes(this.environment.navigator.userAgent)),
@@ -286,6 +289,7 @@ export class InkronikBrowserClient {
         const operation = sendBrowserBatch({
             collectorUrl: this.collectorUrl,
             publicKey: this.publicKey,
+            environment: this.telemetryEnvironment,
             ...transportBatch,
             useBeacon,
             fetchImpl: this.fetchImpl,

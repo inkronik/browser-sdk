@@ -4,6 +4,17 @@ import { InkronikBrowserClient } from './client.js'
 import type { BrowserFetch, BrowserIngestRequest } from './types.js'
 
 describe('InkronikBrowserClient fetch tracing', () => {
+    test('rejects a malformed deployment environment during initialization', () => {
+        expect(
+            () =>
+                new InkronikBrowserClient({
+                    publicKey: `ik_pub_${'a'.repeat(43)}`,
+                    collectorUrl: 'https://collector.example.com',
+                    environment: 'production/eu',
+                }),
+        ).toThrow(TypeError)
+    })
+
     test('starts an independent trace for each allowlisted API request and propagates only traceparent', async () => {
         const originalDescriptors = new Map(
             ['window', 'document', 'navigator', 'fetch', 'PerformanceObserver'].map(name => [
@@ -67,6 +78,7 @@ describe('InkronikBrowserClient fetch tracing', () => {
             const client = new InkronikBrowserClient({
                 publicKey: `ik_pub_${'a'.repeat(43)}`,
                 collectorUrl: 'https://collector.example.com',
+                environment: 'development',
                 tracePropagationOrigins: ['https://api.example.com'],
                 flushIntervalMs: 60_000,
                 user: { id: 'user_42' },
@@ -97,6 +109,7 @@ describe('InkronikBrowserClient fetch tracing', () => {
             const serialized = JSON.stringify(body)
 
             expect(body.public_key).toBe(`ik_pub_${'a'.repeat(43)}`)
+            expect(body.environment).toBe('development')
             expect(body.events.length + body.spans.length).toBeGreaterThan(0)
             expect(clientSpans).toHaveLength(2)
             expect(apiRequests.at(0)?.headers.get('traceparent')).toBe(`00-${firstClientSpan?.trace_id}-${firstClientSpan?.span_id}-01`)

@@ -72,6 +72,19 @@ const trimTrailingSlashes = (value: string): string => {
 
 export const normalizeCollectorUrl = trimTrailingSlashes
 
+const ENVIRONMENT_MAX_LENGTH = 63
+const ENVIRONMENT_PATTERN = /^[a-z0-9][a-z0-9._-]*$/
+
+export const normalizeTelemetryEnvironment = (value: string): string => {
+    const environment = value.trim().toLowerCase()
+
+    if (environment.length === 0 || environment.length > ENVIRONMENT_MAX_LENGTH || !ENVIRONMENT_PATTERN.test(environment)) {
+        throw new TypeError('Inkronik environment must be a canonical slug containing only lowercase letters, numbers, dots, underscores, or dashes')
+    }
+
+    return environment
+}
+
 export const resolveTracePropagationOrigins = ({ environment, configuredOrigins }: ResolveTracePropagationOriginsInput): ReadonlySet<string> =>
     new Set([...(environment === null ? [] : [environment.location.origin]), ...(configuredOrigins ?? []).map(origin => new URL(origin).origin)])
 

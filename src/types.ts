@@ -9,6 +9,7 @@ export type BrowserUrlSanitizer = (url: URL) => string
 export interface CreateInkronikBrowserOptions {
     readonly publicKey: string
     readonly collectorUrl: string
+    readonly environment: string
     readonly sampleRate?: number
     readonly defaultAttributes?: BrowserAttributes
     readonly maxBatchSize?: number
@@ -109,6 +110,7 @@ export interface ResolvedBrowserSession {
 export interface BrowserTransportOptions {
     readonly collectorUrl: string
     readonly publicKey: string
+    readonly environment: string
     readonly fetchImpl: BrowserFetch
     readonly maxRetries: number
     readonly onError: (error: Error) => void

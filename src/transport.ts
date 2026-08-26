@@ -4,7 +4,7 @@ import type { BrowserTransportResult, SendBrowserBatchInput } from './types.js'
 const delay = (milliseconds: number): Promise<void> => new Promise(resolve => setTimeout(resolve, milliseconds))
 
 const postBatch = async (input: SendBrowserBatchInput): Promise<BrowserTransportResult> => {
-    const body = JSON.stringify({ public_key: input.publicKey, events: input.events, spans: input.spans })
+    const body = JSON.stringify({ public_key: input.publicKey, environment: input.environment, events: input.events, spans: input.spans })
 
     if (input.useBeacon && typeof navigator !== 'undefined' && typeof navigator.sendBeacon === 'function') {
         const delivered = navigator.sendBeacon(`${input.collectorUrl}/v1/browser`, new Blob([body], { type: 'text/plain;charset=UTF-8' }))
