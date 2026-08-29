@@ -58,6 +58,27 @@ The public key is a revocable source identifier, not a secret. It can send only 
 The required `environment` option identifies the deployment sending each batch. The same application-scoped public key may therefore be used by
 multiple exact origins while development, staging, and production telemetry remain separate.
 
+## Next.js
+
+Next.js 15.3 and newer can initialize browser telemetry before hydration through `instrumentation-client.ts`. The dedicated entrypoint also uses
+Next.js' router transition hook instead of patching History, so each client-side route change creates one navigation view:
+
+```ts
+// instrumentation-client.ts
+import { createInkronikNext } from '@inkronik/browser-sdk/next'
+
+export const { client: inkronik, onRouterTransitionStart } = createInkronikNext({
+    publicKey: process.env.NEXT_PUBLIC_INKRONIK_PUBLIC_KEY!,
+    collectorUrl: process.env.NEXT_PUBLIC_INKRONIK_COLLECTOR_URL!,
+    environment: process.env.NEXT_PUBLIC_INKRONIK_ENVIRONMENT ?? 'development',
+    tracePropagationOrigins: ['https://api.example.com'],
+})
+```
+
+Create the integration only after the application's consent policy permits telemetry. Values prefixed with `NEXT_PUBLIC_` are bundled for the
+browser: use only the Browser Source public key here, never the server ingest API key. The root package remains appropriate for older Next.js
+versions and other SPA routers; its History integration ignores `pushState` and `replaceState` calls that do not change the URL.
+
 ## Identity and privacy
 
 Use one stable, opaque user ID across the browser and backend, ideally the authentication `sub` or UUID. Matching identifiers let RUM, product

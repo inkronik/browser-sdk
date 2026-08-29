@@ -8,8 +8,8 @@ import {
     SDK_NAME,
     SDK_VERSION,
 } from './constants.js'
-import { installBrowserInstrumentation } from './instrumentation.js'
-import type { BrowserEventType, BrowserSpan } from './protocol/types.js'
+import { installBrowserInstrumentation } from './browser-instrumentation.js'
+import type { BrowserSpan } from './protocol/types.js'
 import { createPrivacyPreservingUrlSanitizer, sanitizeBrowserRoute } from './sanitizer.js'
 import { resolveBrowserSession, resolveBrowserStorage } from './session.js'
 import { createRootBrowserTraceContext, toBrowserTraceparent } from './trace-context.js'
@@ -20,12 +20,14 @@ import type {
     BrowserQueueItem,
     BrowserTransportBatch,
     BrowserViewContext,
+    CaptureBrowserNavigationInput,
     CaptureErrorOptions,
     CaptureEventInput,
     CompleteBrowserFetchSpanInput,
     CreateInkronikBrowserOptions,
     EnqueueBrowserEventInput,
     SetUserInput,
+    StartBrowserViewInput,
 } from './types.js'
 import {
     buildBrowserEvent,
@@ -89,6 +91,7 @@ export class InkronikBrowserClient {
     private readonly getRoute: () => string
     private readonly sanitizeUrl: (url: URL) => string
     private readonly enableFetchTracing: boolean
+    private readonly enableNavigationTracking: boolean
     private readonly tracePropagationOrigins: ReadonlySet<string>
     private readonly environment = resolveBrowserEnvironment()
     private readonly session = resolveBrowserSession({ storage: resolveBrowserStorage(this.environment?.window ?? null) })
@@ -120,6 +123,7 @@ export class InkronikBrowserClient {
         this.getRoute = options.getRoute ?? (() => this.environment?.location.pathname ?? '')
         this.sanitizeUrl = createPrivacyPreservingUrlSanitizer(options.sanitizeUrl)
         this.enableFetchTracing = options.enableFetchTracing ?? true
+        this.enableNavigationTracking = options.enableNavigationTracking ?? true
         this.tracePropagationOrigins = resolveTracePropagationOrigins({
             environment: this.environment,
             configuredOrigins: options.tracePropagationOrigins,
@@ -136,7 +140,7 @@ export class InkronikBrowserClient {
         this.cleanupInstrumentation = this.installInstrumentation()
         this.cleanupLifecycle = this.installLifecycle()
 
-        this.startView('page_view', 'page_view')
+        this.startView({ eventType: 'page_view', name: 'page_view' })
     }
 
     capture(input: CaptureEventInput): void {
@@ -174,6 +178,10 @@ export class InkronikBrowserClient {
         this.userAttributes = {}
     }
 
+    captureNavigation(input: CaptureBrowserNavigationInput): void {
+        this.startView({ eventType: 'navigation', name: input.navigationType, url: input.url })
+    }
+
     flush(): Promise<void> {
         return this.flushBatch(false)
     }
@@ -195,10 +203,10 @@ export class InkronikBrowserClient {
     }
 
     private beginView(name: string): void {
-        this.startView('navigation', name)
+        this.startView({ eventType: 'navigation', name })
     }
 
-    private startView(eventType: BrowserEventType, name: string): void {
+    private startView(input: StartBrowserViewInput): void {
         this.viewContext = { ...createRootBrowserTraceContext(), viewId: createUuid() }
 
         if (this.environment === null) {
@@ -207,14 +215,15 @@ export class InkronikBrowserClient {
 
         const timestamp = new Date().toISOString()
         const sessionId = this.session.touch()
-        const pageUrl = this.sanitizeUrl(new URL(this.environment.location.href))
-        const route = sanitizeBrowserRoute(this.getRoute())
+        const viewUrl = new URL(input.url ?? this.environment.location.href, this.environment.location.href)
+        const pageUrl = this.sanitizeUrl(viewUrl)
+        const route = sanitizeBrowserRoute(input.url === undefined ? this.getRoute() : viewUrl.pathname)
         const attributes = { ...this.defaultAttributes, ...this.userAttributes }
 
         this.enqueueSpan(
             buildBrowserSpan({
                 context: this.viewContext,
-                name: `${eventType} ${route}`,
+                name: `${input.eventType} ${route}`,
                 timestamp,
                 endTime: timestamp,
                 durationUs: 0,
@@ -229,7 +238,7 @@ export class InkronikBrowserClient {
                 attributes,
             }),
         )
-        this.enqueue({ eventType, name })
+        this.enqueue({ eventType: input.eventType, name: input.name, context: { pageUrl, route } })
     }
 
     private enqueue(input: EnqueueBrowserEventInput): void {
@@ -238,13 +247,13 @@ export class InkronikBrowserClient {
         }
 
         const sessionId = this.session.touch()
-
-        const pageUrl = this.sanitizeUrl(new URL(this.environment.location.href))
+        const { context, ...eventInput } = input
+        const pageUrl = context?.pageUrl ?? this.sanitizeUrl(new URL(this.environment.location.href))
         const event = buildBrowserEvent({
-            ...input,
+            ...eventInput,
             defaultAttributes: { ...this.defaultAttributes, ...this.userAttributes },
             pageUrl,
-            route: this.getRoute(),
+            route: context?.route ?? this.getRoute(),
             sessionId,
             userId: this.userId,
             viewId: this.viewContext.viewId,
@@ -321,6 +330,7 @@ export class InkronikBrowserClient {
             beginView: name => this.beginView(name),
             traceFetch: this.traceFetch,
             enableFetchTracing: this.enableFetchTracing,
+            enableNavigationTracking: this.enableNavigationTracking,
         })
     }
 

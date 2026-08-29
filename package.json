@@ -17,15 +17,20 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     },
+    "./next": {
+      "types": "./dist/next/index.d.ts",
+      "import": "./dist/next/index.js"
+    },
     "./package.json": "./package.json"
   },
   "scripts": {
-    "build": "bun run build:clean && bun run build:js && bun run build:types",
+    "build": "bun run build:clean && bun run build:js && bun run build:types && bun run check:next",
     "build:clean": "bun scripts/clean.ts",
-    "build:js": "bun build src/index.ts --root=src --outdir=dist --target=browser --format=esm --sourcemap=linked --reject-unresolved",
+    "build:js": "bun build src/index.ts src/next/index.ts --root=src --outdir=dist --target=browser --format=esm --splitting --sourcemap=linked --reject-unresolved",
     "build:types": "bun tsc --project tsconfig.build.json",
     "check:format": "prettier --check .",
     "check:lint": "eslint src",
+    "check:next": "node scripts/prepare-next-fixture.mjs && next build scripts/fixtures/next-app",
     "pack:check": "npm pack --dry-run",
     "release:version": "release-it --release-version --ci",
     "test": "bun test ./src",
@@ -48,7 +53,8 @@
     "tracing",
     "web-vitals",
     "monitoring",
-    "sdk"
+    "sdk",
+    "nextjs"
   ],
   "publishConfig": {
     "access": "public",
@@ -57,11 +63,15 @@
   "devDependencies": {
     "@release-it/conventional-changelog": "12.0.0",
     "@types/bun": "1.4.0",
+    "@types/react": "19.2.18",
     "brace-expansion": "5.0.9",
     "eslint": "10.9.0",
     "eslint-config-codemask": "2.2.1",
     "ip-address": "10.5.0",
+    "next": "16.3.3",
     "prettier": "3.9.6",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
     "release-it": "21.0.2",
     "typescript": "5.9.3"
   },
