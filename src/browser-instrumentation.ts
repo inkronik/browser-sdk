@@ -1,4 +1,4 @@
-/* eslint-disable functional/immutable-data -- Browser instrumentation must patch and restore external History APIs. */
+/* eslint-disable functional/immutable-data -- Browser instrumentation must patch and restore external browser APIs. */
 /* eslint-disable functional/functional-parameters -- History methods require their native variadic signatures. */
 /* eslint-disable functional/prefer-tacit -- The wrapper preserves navigation instrumentation semantics. */
 /* eslint-disable @typescript-eslint/unbound-method -- The original History methods are always invoked with History via apply. */
@@ -15,18 +15,30 @@ const safeUrl = (value: string): string => {
 }
 
 const installNavigationInstrumentation = (input: BrowserInstrumentationInput): (() => void) => {
+    if (!input.enableNavigationTracking) {
+        return () => undefined
+    }
+
     const originalPushState = input.environment.history.pushState
     const originalReplaceState = input.environment.history.replaceState
     const captureNavigation = () => input.beginView('navigation')
     const onPopState = () => captureNavigation()
 
     input.environment.history.pushState = (...arguments_: Parameters<History['pushState']>) => {
+        const previousUrl = input.environment.location.href
         originalPushState.apply(input.environment.history, arguments_)
-        captureNavigation()
+
+        if (input.environment.location.href !== previousUrl) {
+            captureNavigation()
+        }
     }
     input.environment.history.replaceState = (...arguments_: Parameters<History['replaceState']>) => {
+        const previousUrl = input.environment.location.href
         originalReplaceState.apply(input.environment.history, arguments_)
-        captureNavigation()
+
+        if (input.environment.location.href !== previousUrl) {
+            captureNavigation()
+        }
     }
     input.environment.window.addEventListener('popstate', onPopState)
 

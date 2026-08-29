@@ -22,7 +22,15 @@ export interface CreateInkronikBrowserOptions {
     readonly sanitizeUrl?: BrowserUrlSanitizer
     readonly user?: SetUserInput
     readonly enableFetchTracing?: boolean
+    readonly enableNavigationTracking?: boolean
     readonly tracePropagationOrigins?: ReadonlyArray<string>
+}
+
+export type BrowserNavigationType = 'push' | 'replace' | 'traverse'
+
+export interface CaptureBrowserNavigationInput {
+    readonly navigationType: BrowserNavigationType
+    readonly url: string
 }
 
 export interface CaptureEventInput {
@@ -66,6 +74,12 @@ export interface EnqueueBrowserEventInput {
     readonly error?: CapturedError
     readonly attributes?: BrowserAttributes
     readonly measurements?: Readonly<Record<string, number>>
+    readonly context?: BrowserEventContextOverride
+}
+
+export interface BrowserEventContextOverride {
+    readonly pageUrl: string
+    readonly route: string
 }
 
 export interface BrowserEnvironment {
@@ -173,6 +187,13 @@ export interface BrowserInstrumentationInput {
     readonly beginView: (name: string) => void
     readonly traceFetch: BrowserFetch
     readonly enableFetchTracing: boolean
+    readonly enableNavigationTracking: boolean
+}
+
+export interface StartBrowserViewInput {
+    readonly eventType: BrowserEventType
+    readonly name: string
+    readonly url?: string
 }
 
 export interface BuildBrowserSpanInput {
