@@ -73,7 +73,7 @@
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "release-it": "21.0.2",
-    "typescript": "5.9.3"
+    "typescript": "7.0.2"
   },
   "overrides": {
     "deepmerge-ts": "8.0.1"
