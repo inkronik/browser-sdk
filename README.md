@@ -139,6 +139,8 @@ await inkronik.flush()
 
 ## Development
 
+The SDK declaration build uses TypeScript 7 (`tsc`, provided by the `@typescript/native` alias). ESLint and Next.js use the TypeScript 6 compatibility API through the `typescript` alias, following [Microsoft's side-by-side setup](https://devblogs.microsoft.com/typescript/announcing-typescript-7-0/#running-side-by-side-with-typescript-6.0). Keep both compiler aliases pinned when updating the toolchain.
+
 ```bash
 bun install --frozen-lockfile
 bun test
