@@ -66,14 +66,14 @@
     "@types/react": "19.3.0",
     "@typescript/native": "npm:typescript@7.0.2",
     "brace-expansion": "5.0.12",
-    "eslint": "10.13.0",
+    "eslint": "10.14.0",
     "eslint-config-codemask": "2.2.1",
-    "ip-address": "10.7.4",
-    "next": "16.4.2",
+    "ip-address": "10.7.6",
+    "next": "16.4.5",
     "prettier": "3.9.10",
     "react": "19.3.1",
     "react-dom": "19.3.1",
-    "release-it": "21.1.1",
+    "release-it": "21.1.2",
     "typescript": "npm:@typescript/typescript6@6.0.2"
   },
   "overrides": {
