@@ -3,6 +3,8 @@ export const DEFAULT_MAX_QUEUE_SIZE = 200
 export const DEFAULT_FLUSH_INTERVAL_MS = 5000
 export const DEFAULT_MAX_RETRIES = 2
 export const DEFAULT_RETRY_BASE_MS = 250
+// Match the Collector's accepted timestamp window for browser events and spans.
+export const BROWSER_TELEMETRY_MAX_AGE_MS = 24 * 60 * 60 * 1000
 export const DEFAULT_SAMPLE_RATE = 1
 export const SDK_NAME = '@inkronik/browser-sdk'
 export const SDK_VERSION = '1.1.0'

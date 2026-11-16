@@ -138,6 +138,7 @@ export interface SendBrowserBatchInput extends BrowserTransportOptions {
 
 export interface BrowserTransportResult {
     readonly delivered: boolean
+    readonly rejected?: true
 }
 
 export interface BrowserQueueState {

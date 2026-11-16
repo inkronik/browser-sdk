@@ -1,6 +1,8 @@
 import { DEFAULT_RETRY_BASE_MS } from './constants.js'
 import type { BrowserTransportResult, SendBrowserBatchInput } from './types.js'
 
+class BrowserBatchRejectedError extends Error {}
+
 const delay = (milliseconds: number): Promise<void> => new Promise(resolve => setTimeout(resolve, milliseconds))
 
 const postBatch = async (input: SendBrowserBatchInput): Promise<BrowserTransportResult> => {
@@ -21,7 +23,8 @@ const postBatch = async (input: SendBrowserBatchInput): Promise<BrowserTransport
     })
 
     if (!response.ok) {
-        throw new Error(`Inkronik browser ingest failed with status ${response.status}`)
+        const message = `Inkronik browser ingest failed with status ${response.status}`
+        throw response.status === 400 ? new BrowserBatchRejectedError(message) : new Error(message)
     }
 
     return { delivered: true }
@@ -34,7 +37,7 @@ export const sendBrowserBatch = async (input: SendBrowserBatchInput): Promise<Br
         async (previous, attempt) => {
             const previousResult = await previous
 
-            if (previousResult.delivered) {
+            if (previousResult.delivered || previousResult.rejected === true) {
                 return previousResult
             }
 
@@ -43,12 +46,13 @@ export const sendBrowserBatch = async (input: SendBrowserBatchInput): Promise<Br
                 await delay(DEFAULT_RETRY_BASE_MS * 2 ** (attempt - 1) + jitter)
             }
 
-            return postBatch(input).catch(error => {
-                if (attempt === attempts.length - 1) {
+            return postBatch(input).catch((error: unknown) => {
+                const rejected = error instanceof BrowserBatchRejectedError
+                if (rejected || attempt === attempts.length - 1) {
                     input.onError(error instanceof Error ? error : new Error(String(error)))
                 }
 
-                return { delivered: false }
+                return rejected ? { delivered: false, rejected: true } : { delivered: false }
             })
         },
         Promise.resolve({ delivered: false }),
