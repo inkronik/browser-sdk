@@ -1,4 +1,4 @@
-import { MAX_ERROR_VALUE_LENGTH, MAX_EVENT_MESSAGE_LENGTH } from './constants.js'
+import { BROWSER_TELEMETRY_MAX_AGE_MS, MAX_ERROR_VALUE_LENGTH, MAX_EVENT_MESSAGE_LENGTH } from './constants.js'
 import type { BrowserEvent, BrowserSpan } from './protocol/types.js'
 import { redactBrowserErrorValue, redactBrowserValue, sanitizeBrowserAttributes, sanitizeBrowserRoute, sanitizeBrowserUrl } from './sanitizer.js'
 import type {
@@ -57,6 +57,8 @@ export const normalizeCapturedBrowserError = (error: unknown): CapturedError => 
 }
 
 export const createUuid = (): string => crypto.randomUUID()
+
+export const getBrowserTelemetryCutoff = (): number => Date.now() - BROWSER_TELEMETRY_MAX_AGE_MS
 
 const trimTrailingSlashes = (value: string): string => {
     // eslint-disable-next-line functional/no-let -- A mutable cursor guarantees a linear scan without an attacker-sized intermediate allocation.

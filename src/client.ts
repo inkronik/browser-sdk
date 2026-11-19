@@ -34,6 +34,7 @@ import {
     buildBrowserSpan,
     createUuid,
     deterministicSample,
+    getBrowserTelemetryCutoff,
     normalizeBrowserUserContext,
     normalizeCapturedBrowserError,
     normalizeCollectorUrl,
@@ -75,6 +76,12 @@ const getBrowserAttributes = (userAgent: string): BrowserAttributes => {
         sdk_name: SDK_NAME,
         sdk_version: SDK_VERSION,
     }
+}
+
+const removeExpiredItems = (items: ReadonlyArray<BrowserQueueItem>): ReadonlyArray<BrowserQueueItem> => {
+    const cutoff = getBrowserTelemetryCutoff()
+
+    return items.filter(item => Date.parse(item.itemType === 'event' ? item.event.timestamp : item.span.timestamp) >= cutoff)
 }
 
 export class InkronikBrowserClient {
@@ -284,13 +291,14 @@ export class InkronikBrowserClient {
             return this.flushing
         }
 
-        const batch = this.queue.slice(0, this.maxBatchSize)
+        const queue = removeExpiredItems(this.queue)
+        const batch = queue.slice(0, this.maxBatchSize)
+        this.queue = queue.slice(batch.length)
 
         if (batch.length === 0) {
             return Promise.resolve()
         }
 
-        this.queue = this.queue.slice(batch.length)
         const transportBatch: BrowserTransportBatch = {
             events: batch.flatMap(item => (item.itemType === 'event' ? [item.event] : [])),
             spans: batch.flatMap(item => (item.itemType === 'span' ? [item.span] : [])),
@@ -306,8 +314,8 @@ export class InkronikBrowserClient {
             onError: this.onError,
         })
             .then(result => {
-                if (!result.delivered) {
-                    this.queue = [...batch, ...this.queue].slice(0, this.maxQueueSize)
+                if (!result.delivered && result.rejected !== true) {
+                    this.queue = removeExpiredItems([...batch, ...this.queue]).slice(0, this.maxQueueSize)
                 }
             })
             .finally(() => {

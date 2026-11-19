@@ -1,7 +1,62 @@
 /* eslint-disable functional/immutable-data -- The test installs and restores controlled browser globals around the SDK lifecycle. */
-import { describe, expect, mock, test } from 'bun:test'
+import { describe, expect, mock, setSystemTime, test } from 'bun:test'
 import { InkronikBrowserClient } from './client.js'
+import { BROWSER_TELEMETRY_MAX_AGE_MS } from './constants.js'
 import type { BrowserFetch, BrowserIngestRequest } from './types.js'
+
+const installBrowserGlobals = (fetchImpl: BrowserFetch, performanceNow: () => number) => {
+    const originalDescriptors = new Map(
+        ['window', 'document', 'navigator', 'fetch', 'PerformanceObserver'].map(name => [name, Object.getOwnPropertyDescriptor(globalThis, name)]),
+    )
+    const history = {
+        pushState: () => undefined,
+        replaceState: () => undefined,
+    }
+    const location = {
+        href: 'https://app.example.com/recordings?input=PAGE_SECRET#fragment',
+        origin: 'https://app.example.com',
+        pathname: '/recordings',
+    }
+    const navigatorValue = { userAgent: 'TestBrowser/1.0' }
+    const documentValue = {
+        visibilityState: 'visible',
+        addEventListener: () => undefined,
+        removeEventListener: () => undefined,
+    }
+    const windowValue = {
+        fetch: fetchImpl,
+        history,
+        location,
+        navigator: navigatorValue,
+        performance: { now: performanceNow, getEntriesByType: () => [] },
+        addEventListener: () => undefined,
+        removeEventListener: () => undefined,
+    }
+
+    Object.defineProperties(globalThis, {
+        window: { configurable: true, value: windowValue },
+        document: { configurable: true, value: documentValue },
+        navigator: { configurable: true, value: navigatorValue },
+        fetch: { configurable: true, value: fetchImpl },
+        PerformanceObserver: { configurable: true, value: undefined },
+    })
+
+    return {
+        windowValue,
+        restore: () => {
+            originalDescriptors.forEach((descriptor, name) => {
+                if (descriptor === undefined) {
+                    Reflect.deleteProperty(globalThis, name)
+                } else {
+                    Object.defineProperty(globalThis, name, descriptor)
+                }
+            })
+        },
+    }
+}
+
+const readIngestRequest = (args: Parameters<BrowserFetch> | undefined): Promise<BrowserIngestRequest | null> =>
+    args === undefined ? Promise.resolve(null) : (new Request(...args).json() as Promise<BrowserIngestRequest>)
 
 describe('InkronikBrowserClient fetch tracing', () => {
     test('rejects a malformed deployment environment during initialization', () => {
@@ -16,12 +71,6 @@ describe('InkronikBrowserClient fetch tracing', () => {
     })
 
     test('starts an independent trace for each allowlisted API request and propagates only traceparent', async () => {
-        const originalDescriptors = new Map(
-            ['window', 'document', 'navigator', 'fetch', 'PerformanceObserver'].map(name => [
-                name,
-                Object.getOwnPropertyDescriptor(globalThis, name),
-            ]),
-        )
         const apiRequests: Array<Request> = []
         const collectorRequests: Array<Request> = []
         const fetchReceivers: Array<unknown> = []
@@ -41,38 +90,7 @@ describe('InkronikBrowserClient fetch tracing', () => {
         })
         const performanceNow = mock(() => 12)
         performanceNow.mockReturnValueOnce(0)
-        const history = {
-            pushState: () => undefined,
-            replaceState: () => undefined,
-        }
-        const location = {
-            href: 'https://app.example.com/recordings?input=PAGE_SECRET#fragment',
-            origin: 'https://app.example.com',
-            pathname: '/recordings',
-        }
-        const navigatorValue = { userAgent: 'TestBrowser/1.0' }
-        const documentValue = {
-            visibilityState: 'visible',
-            addEventListener: () => undefined,
-            removeEventListener: () => undefined,
-        }
-        const windowValue = {
-            fetch: fetchImpl,
-            history,
-            location,
-            navigator: navigatorValue,
-            performance: { now: performanceNow, getEntriesByType: () => [] },
-            addEventListener: () => undefined,
-            removeEventListener: () => undefined,
-        }
-
-        Object.defineProperties(globalThis, {
-            window: { configurable: true, value: windowValue },
-            document: { configurable: true, value: documentValue },
-            navigator: { configurable: true, value: navigatorValue },
-            fetch: { configurable: true, value: fetchImpl },
-            PerformanceObserver: { configurable: true, value: undefined },
-        })
+        const { windowValue, restore } = installBrowserGlobals(fetchImpl, performanceNow)
 
         try {
             const client = new InkronikBrowserClient({
@@ -144,13 +162,153 @@ describe('InkronikBrowserClient fetch tracing', () => {
             expect(fetchReceivers.every(receiver => receiver === windowValue)).toBe(true)
             expect(windowValue.fetch).toBe(fetchImpl)
         } finally {
-            originalDescriptors.forEach((descriptor, name) => {
-                if (descriptor === undefined) {
-                    Reflect.deleteProperty(globalThis, name)
-                } else {
-                    Object.defineProperty(globalThis, name, descriptor)
-                }
-            })
+            restore()
+        }
+    })
+})
+
+describe('InkronikBrowserClient browser ingest queue', () => {
+    const clientOptions = {
+        publicKey: `ik_pub_${'a'.repeat(43)}`,
+        collectorUrl: 'https://collector.example.com',
+        environment: 'production',
+        flushIntervalMs: 60_000,
+    }
+
+    test('drops expired events and spans while sending fresh events from the same queue', async () => {
+        const fetchImpl = mock<BrowserFetch>(() => Promise.resolve(new Response(null, { status: 202 })))
+        const { restore } = installBrowserGlobals(fetchImpl, () => 0)
+        const startedAt = Date.parse('2026-11-09T10:35:51Z')
+        setSystemTime(startedAt)
+        const client = new InkronikBrowserClient(clientOptions)
+
+        try {
+            client.capture({ name: 'expired' })
+            setSystemTime(startedAt + 1)
+            client.capture({ name: 'at_boundary' })
+            setSystemTime(startedAt + 24 * 60 * 60 * 1000 + 1)
+            client.capture({ name: 'fresh' })
+            await client.flush()
+
+            expect(fetchImpl).toHaveBeenCalledTimes(1)
+            const body = await readIngestRequest(fetchImpl.mock.calls.at(0))
+            expect(body?.events.map(event => event.name)).toEqual(['at_boundary', 'fresh'])
+            expect(body?.spans).toEqual([])
+        } finally {
+            await client.shutdown()
+            setSystemTime()
+            restore()
+        }
+    })
+
+    test('drops the rejected batch after one HTTP 400 and flushes later events', async () => {
+        const fetchImpl = mock<BrowserFetch>(() => Promise.resolve(new Response(null, { status: 202 })))
+        fetchImpl.mockResolvedValueOnce(new Response(null, { status: 400 }))
+        const onError = mock(() => undefined)
+        const { restore } = installBrowserGlobals(fetchImpl, () => 0)
+        const client = new InkronikBrowserClient({ ...clientOptions, maxRetries: 2, onError })
+
+        try {
+            client.capture({ name: 'rejected_event' })
+            await client.flush()
+            await client.flush()
+
+            expect(fetchImpl).toHaveBeenCalledTimes(1)
+            expect(onError).toHaveBeenCalledTimes(1)
+            expect(onError).toHaveBeenCalledWith(expect.objectContaining({ message: 'Inkronik browser ingest failed with status 400' }))
+
+            client.capture({ name: 'later_event' })
+            await client.flush()
+
+            expect(fetchImpl).toHaveBeenCalledTimes(2)
+            const body = await readIngestRequest(fetchImpl.mock.calls.at(1))
+            expect(body?.events.map(event => event.name)).toEqual(['later_event'])
+            expect(body?.spans).toEqual([])
+        } finally {
+            await client.shutdown()
+            restore()
+        }
+    })
+
+    test('sends only fresh telemetry when part of a batch expires after a 503', async () => {
+        const startedAt = Date.parse('2026-11-09T10:35:51Z')
+        const expiresAt = startedAt + BROWSER_TELEMETRY_MAX_AGE_MS
+        const fetchImpl = mock<BrowserFetch>(() => Promise.resolve(new Response(null, { status: 202 })))
+        fetchImpl.mockImplementationOnce(() => {
+            setSystemTime(expiresAt + 1)
+            return Promise.resolve(new Response(null, { status: 503 }))
+        })
+        const onError = mock(() => undefined)
+        const { restore } = installBrowserGlobals(fetchImpl, () => 0)
+        setSystemTime(startedAt)
+        const client = new InkronikBrowserClient({ ...clientOptions, maxRetries: 1, onError })
+
+        try {
+            client.capture({ name: 'near_expiry' })
+            setSystemTime(expiresAt - 1)
+            client.capture({ name: 'fresh' })
+            await client.flush()
+            await client.flush()
+
+            expect(fetchImpl).toHaveBeenCalledTimes(2)
+            const first = await readIngestRequest(fetchImpl.mock.calls.at(0))
+            const retry = await readIngestRequest(fetchImpl.mock.calls.at(1))
+            expect(first?.events.map(event => event.name)).toEqual(['page_view', 'near_expiry', 'fresh'])
+            expect(first?.spans).toHaveLength(1)
+            expect(retry?.events.map(event => event.name)).toEqual(['fresh'])
+            expect(retry?.spans).toEqual([])
+            expect(onError).not.toHaveBeenCalled()
+        } finally {
+            await client.shutdown()
+            setSystemTime()
+            restore()
+        }
+    })
+
+    test('skips sending when the entire batch expires after a 503', async () => {
+        const startedAt = Date.parse('2026-11-09T10:35:51Z')
+        const fetchImpl = mock<BrowserFetch>(() => {
+            setSystemTime(startedAt + BROWSER_TELEMETRY_MAX_AGE_MS + 1)
+            return Promise.resolve(new Response(null, { status: 503 }))
+        })
+        const onError = mock(() => undefined)
+        const { restore } = installBrowserGlobals(fetchImpl, () => 0)
+        setSystemTime(startedAt)
+        const client = new InkronikBrowserClient({ ...clientOptions, maxRetries: 1, onError })
+
+        try {
+            client.capture({ name: 'near_expiry' })
+            await client.flush()
+            await client.flush()
+
+            expect(fetchImpl).toHaveBeenCalledTimes(1)
+            expect(onError).not.toHaveBeenCalled()
+        } finally {
+            await client.shutdown()
+            setSystemTime()
+            restore()
+        }
+    })
+
+    test('keeps a batch for the next flush after a transient 503', async () => {
+        const fetchImpl = mock<BrowserFetch>(() => Promise.resolve(new Response(null, { status: 202 })))
+        fetchImpl.mockResolvedValueOnce(new Response(null, { status: 503 }))
+        const { restore } = installBrowserGlobals(fetchImpl, () => 0)
+        const client = new InkronikBrowserClient({ ...clientOptions, maxRetries: 0 })
+
+        try {
+            client.capture({ name: 'retryable_event' })
+            await client.flush()
+            await client.flush()
+
+            expect(fetchImpl).toHaveBeenCalledTimes(2)
+            const sent = await readIngestRequest(fetchImpl.mock.calls.at(0))
+            const resent = await readIngestRequest(fetchImpl.mock.calls.at(1))
+            expect(resent?.events.map(event => event.name)).toContain('retryable_event')
+            expect(resent).toEqual(sent)
+        } finally {
+            await client.shutdown()
+            restore()
         }
     })
 })
