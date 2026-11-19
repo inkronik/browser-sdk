@@ -1,6 +1,5 @@
 /* eslint-disable functional/immutable-data -- The bounded in-memory SDK queue and lifecycle state are intentionally stateful. */
 import {
-    BROWSER_TELEMETRY_MAX_AGE_MS,
     DEFAULT_BATCH_SIZE,
     DEFAULT_FLUSH_INTERVAL_MS,
     DEFAULT_MAX_QUEUE_SIZE,
@@ -35,6 +34,7 @@ import {
     buildBrowserSpan,
     createUuid,
     deterministicSample,
+    getBrowserTelemetryCutoff,
     normalizeBrowserUserContext,
     normalizeCapturedBrowserError,
     normalizeCollectorUrl,
@@ -79,7 +79,7 @@ const getBrowserAttributes = (userAgent: string): BrowserAttributes => {
 }
 
 const removeExpiredItems = (items: ReadonlyArray<BrowserQueueItem>): ReadonlyArray<BrowserQueueItem> => {
-    const cutoff = Date.now() - BROWSER_TELEMETRY_MAX_AGE_MS
+    const cutoff = getBrowserTelemetryCutoff()
 
     return items.filter(item => Date.parse(item.itemType === 'event' ? item.event.timestamp : item.span.timestamp) >= cutoff)
 }

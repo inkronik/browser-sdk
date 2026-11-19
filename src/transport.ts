@@ -1,12 +1,21 @@
 import { DEFAULT_RETRY_BASE_MS } from './constants.js'
 import type { BrowserTransportResult, SendBrowserBatchInput } from './types.js'
+import { getBrowserTelemetryCutoff } from './utils.js'
 
 class BrowserBatchRejectedError extends Error {}
 
 const delay = (milliseconds: number): Promise<void> => new Promise(resolve => setTimeout(resolve, milliseconds))
 
 const postBatch = async (input: SendBrowserBatchInput): Promise<BrowserTransportResult> => {
-    const body = JSON.stringify({ public_key: input.publicKey, environment: input.environment, events: input.events, spans: input.spans })
+    const cutoff = getBrowserTelemetryCutoff()
+    const events = input.events.filter(event => Date.parse(event.timestamp) >= cutoff)
+    const spans = input.spans.filter(span => Date.parse(span.timestamp) >= cutoff)
+
+    if (events.length === 0 && spans.length === 0) {
+        return { delivered: false, rejected: true }
+    }
+
+    const body = JSON.stringify({ public_key: input.publicKey, environment: input.environment, events, spans })
 
     if (input.useBeacon && typeof navigator !== 'undefined' && typeof navigator.sendBeacon === 'function') {
         const delivered = navigator.sendBeacon(`${input.collectorUrl}/v1/browser`, new Blob([body], { type: 'text/plain;charset=UTF-8' }))

@@ -1,6 +1,7 @@
 /* eslint-disable functional/immutable-data -- The test installs and restores controlled browser globals around the SDK lifecycle. */
 import { describe, expect, mock, setSystemTime, test } from 'bun:test'
 import { InkronikBrowserClient } from './client.js'
+import { BROWSER_TELEMETRY_MAX_AGE_MS } from './constants.js'
 import type { BrowserFetch, BrowserIngestRequest } from './types.js'
 
 const installBrowserGlobals = (fetchImpl: BrowserFetch, performanceNow: () => number) => {
@@ -225,6 +226,66 @@ describe('InkronikBrowserClient browser ingest queue', () => {
             expect(body?.spans).toEqual([])
         } finally {
             await client.shutdown()
+            restore()
+        }
+    })
+
+    test('sends only fresh telemetry when part of a batch expires after a 503', async () => {
+        const startedAt = Date.parse('2026-11-09T10:35:51Z')
+        const expiresAt = startedAt + BROWSER_TELEMETRY_MAX_AGE_MS
+        const fetchImpl = mock<BrowserFetch>(() => Promise.resolve(new Response(null, { status: 202 })))
+        fetchImpl.mockImplementationOnce(() => {
+            setSystemTime(expiresAt + 1)
+            return Promise.resolve(new Response(null, { status: 503 }))
+        })
+        const onError = mock(() => undefined)
+        const { restore } = installBrowserGlobals(fetchImpl, () => 0)
+        setSystemTime(startedAt)
+        const client = new InkronikBrowserClient({ ...clientOptions, maxRetries: 1, onError })
+
+        try {
+            client.capture({ name: 'near_expiry' })
+            setSystemTime(expiresAt - 1)
+            client.capture({ name: 'fresh' })
+            await client.flush()
+            await client.flush()
+
+            expect(fetchImpl).toHaveBeenCalledTimes(2)
+            const first = await readIngestRequest(fetchImpl.mock.calls.at(0))
+            const retry = await readIngestRequest(fetchImpl.mock.calls.at(1))
+            expect(first?.events.map(event => event.name)).toEqual(['page_view', 'near_expiry', 'fresh'])
+            expect(first?.spans).toHaveLength(1)
+            expect(retry?.events.map(event => event.name)).toEqual(['fresh'])
+            expect(retry?.spans).toEqual([])
+            expect(onError).not.toHaveBeenCalled()
+        } finally {
+            await client.shutdown()
+            setSystemTime()
+            restore()
+        }
+    })
+
+    test('skips sending when the entire batch expires after a 503', async () => {
+        const startedAt = Date.parse('2026-11-09T10:35:51Z')
+        const fetchImpl = mock<BrowserFetch>(() => {
+            setSystemTime(startedAt + BROWSER_TELEMETRY_MAX_AGE_MS + 1)
+            return Promise.resolve(new Response(null, { status: 503 }))
+        })
+        const onError = mock(() => undefined)
+        const { restore } = installBrowserGlobals(fetchImpl, () => 0)
+        setSystemTime(startedAt)
+        const client = new InkronikBrowserClient({ ...clientOptions, maxRetries: 1, onError })
+
+        try {
+            client.capture({ name: 'near_expiry' })
+            await client.flush()
+            await client.flush()
+
+            expect(fetchImpl).toHaveBeenCalledTimes(1)
+            expect(onError).not.toHaveBeenCalled()
+        } finally {
+            await client.shutdown()
+            setSystemTime()
             restore()
         }
     })

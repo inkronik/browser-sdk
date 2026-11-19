@@ -4,6 +4,7 @@ import { sendBrowserBatch } from './transport.js'
 
 describe('browser transport', () => {
     test('sends mixed event and span batches through the public browser endpoint', async () => {
+        const startedAt = Date.now()
         const requests: Array<Request> = []
         const fetchImpl = mock<BrowserFetch>((input: RequestInfo | URL, init?: RequestInit) => {
             // eslint-disable-next-line functional/immutable-data -- Capturing a request is required by this transport mock.
@@ -22,8 +23,8 @@ describe('browser transport', () => {
                     span_id: 'b'.repeat(16),
                     parent_span_id: 'c'.repeat(16),
                     name: 'GET /orders',
-                    timestamp: '2026-07-16T12:00:00.000Z',
-                    end_time: '2026-07-16T12:00:00.010Z',
+                    timestamp: new Date(startedAt).toISOString(),
+                    end_time: new Date(startedAt + 10).toISOString(),
                     duration_us: 10_000,
                     span_kind: 'client',
                     span_category: 'http',
