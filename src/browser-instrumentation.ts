@@ -4,6 +4,7 @@
 /* eslint-disable @typescript-eslint/unbound-method -- The original History methods are always invoked with History via apply. */
 import { sanitizeBrowserUrl } from './sanitizer.js'
 import { INKRONIK_ORIGINAL_BROWSER_FETCH } from './constants.js'
+import { installBrowserXhrInstrumentation } from './xhr-instrumentation.js'
 import type { BrowserInstrumentationInput, InteractionPerformanceEntry, LayoutShiftPerformanceEntry } from './types.js'
 
 const safeUrl = (value: string): string => {
@@ -185,6 +186,7 @@ export const installBrowserInstrumentation = (input: BrowserInstrumentationInput
     const cleanups = [
         installNavigationInstrumentation(input),
         installFetchInstrumentation(input),
+        installBrowserXhrInstrumentation(input),
         installErrorInstrumentation(input),
         installWebVitalsInstrumentation(input),
     ]

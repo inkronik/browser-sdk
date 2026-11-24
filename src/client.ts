@@ -23,7 +23,9 @@ import type {
     CaptureBrowserNavigationInput,
     CaptureErrorOptions,
     CaptureEventInput,
-    CompleteBrowserFetchSpanInput,
+    CompleteBrowserRequestSpanInput,
+    BrowserRequestTraceInput,
+    BrowserXhrTrace,
     CreateInkronikBrowserOptions,
     EnqueueBrowserEventInput,
     SetUserInput,
@@ -98,6 +100,7 @@ export class InkronikBrowserClient {
     private readonly getRoute: () => string
     private readonly sanitizeUrl: (url: URL) => string
     private readonly enableFetchTracing: boolean
+    private readonly enableXhrTracing: boolean
     private readonly enableNavigationTracking: boolean
     private readonly tracePropagationOrigins: ReadonlySet<string>
     private readonly environment = resolveBrowserEnvironment()
@@ -130,6 +133,7 @@ export class InkronikBrowserClient {
         this.getRoute = options.getRoute ?? (() => this.environment?.location.pathname ?? '')
         this.sanitizeUrl = createPrivacyPreservingUrlSanitizer(options.sanitizeUrl)
         this.enableFetchTracing = options.enableFetchTracing ?? true
+        this.enableXhrTracing = options.enableXhrTracing ?? true
         this.enableNavigationTracking = options.enableNavigationTracking ?? true
         this.tracePropagationOrigins = resolveTracePropagationOrigins({
             environment: this.environment,
@@ -338,6 +342,8 @@ export class InkronikBrowserClient {
             beginView: name => this.beginView(name),
             traceFetch: this.traceFetch,
             enableFetchTracing: this.enableFetchTracing,
+            enableXhrTracing: this.enableXhrTracing,
+            startXhrTrace: this.startRequestTrace,
             enableNavigationTracking: this.enableNavigationTracking,
         })
     }
@@ -349,26 +355,44 @@ export class InkronikBrowserClient {
 
         const request = new Request(input, init)
         const requestUrl = new URL(request.url, this.environment.location.href)
+        const trace = this.startRequestTrace({ transport: 'fetch', method: request.method, url: requestUrl })
+
+        if (trace === undefined) return this.fetchImpl(input, init)
+        const headers = new Headers(request.headers)
+        headers.set('traceparent', trace.traceparent)
+        const tracedRequest = new Request(request, { headers })
+
+        return this.fetchImpl(tracedRequest).then(
+            response => {
+                trace.complete({ status: response.status })
+                return response
+            },
+            error => {
+                trace.complete({ status: 0, error })
+                throw error
+            },
+        )
+    }
+
+    private readonly startRequestTrace = (request: BrowserRequestTraceInput): BrowserXhrTrace | undefined => {
+        if (this.environment === null || !this.sampled || this.closed) return undefined
 
         if (
             !shouldTraceBrowserRequest({
                 collectorUrl: this.collectorUrl,
-                requestUrl,
+                requestUrl: request.url,
                 tracePropagationOrigins: this.tracePropagationOrigins,
             })
         ) {
-            return this.fetchImpl(input, init)
+            return undefined
         }
 
         const context = createRootBrowserTraceContext()
         const sessionId = this.session.touch()
-        const headers = new Headers(request.headers)
-        headers.set('traceparent', toBrowserTraceparent(context))
-        const tracedRequest = new Request(request, { headers })
         const completionInput = {
             context,
             viewContext: this.viewContext,
-            request: tracedRequest,
+            request,
             startedAt: this.environment.performance.now(),
             timestamp: new Date().toISOString(),
             pageUrl: this.sanitizeUrl(new URL(this.environment.location.href)),
@@ -378,22 +402,15 @@ export class InkronikBrowserClient {
             attributes: { ...this.defaultAttributes, ...this.userAttributes },
         }
 
-        return this.fetchImpl(tracedRequest).then(
-            response => {
-                this.completeFetchSpan({ ...completionInput, response })
-
-                return response
-            },
-            error => {
-                this.completeFetchSpan({ ...completionInput, error })
-                throw error
-            },
-        )
+        return {
+            traceparent: toBrowserTraceparent(context),
+            complete: result => this.completeRequestSpan({ ...completionInput, ...result }),
+        }
     }
 
-    private completeFetchSpan(input: CompleteBrowserFetchSpanInput): void {
-        const requestUrl = new URL(input.request.url)
-        const statusCode = input.response?.status ?? 0
+    private completeRequestSpan(input: CompleteBrowserRequestSpanInput): void {
+        const requestUrl = input.request.url
+        const statusCode = input.status
         const hasError = input.error !== undefined || statusCode >= 500
 
         this.enqueueSpan(
@@ -406,7 +423,7 @@ export class InkronikBrowserClient {
                 spanKind: 'client',
                 spanCategory: 'http',
                 statusCode: hasError ? 'error' : 'ok',
-                statusMessage: input.error === undefined ? '' : 'FetchError',
+                statusMessage: input.error === undefined ? '' : input.request.transport === 'fetch' ? 'FetchError' : 'XhrError',
                 sessionId: input.sessionId,
                 viewId: input.viewContext.viewId,
                 pageUrl: input.pageUrl,

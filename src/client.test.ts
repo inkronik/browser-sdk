@@ -4,6 +4,33 @@ import { InkronikBrowserClient } from './client.js'
 import { BROWSER_TELEMETRY_MAX_AGE_MS } from './constants.js'
 import type { BrowserFetch, BrowserIngestRequest } from './types.js'
 
+class FakeXhr extends EventTarget {
+    public readonly headers = new Map<string, string>()
+    public status = 200
+    public readyState = 0
+    public body: unknown
+    public isFailing = false
+    public method = ''
+    public url = ''
+    public open(method: string, url: string): void {
+        this.method = method
+        this.url = url
+        this.headers.clear()
+    }
+    public setRequestHeader(name: string, value: string): void {
+        const previous = this.headers.get(name.toLowerCase())
+        this.headers.set(name.toLowerCase(), previous === undefined ? value : `${previous}, ${value}`)
+    }
+    public send(body: unknown): void {
+        if (this.isFailing) throw new Error('network failure')
+        this.body = body
+    }
+    public finish(status: number): void {
+        this.status = status
+        this.dispatchEvent(new Event('loadend'))
+    }
+}
+
 const installBrowserGlobals = (fetchImpl: BrowserFetch, performanceNow: () => number) => {
     const originalDescriptors = new Map(
         ['window', 'document', 'navigator', 'fetch', 'PerformanceObserver'].map(name => [name, Object.getOwnPropertyDescriptor(globalThis, name)]),
@@ -24,6 +51,7 @@ const installBrowserGlobals = (fetchImpl: BrowserFetch, performanceNow: () => nu
         removeEventListener: () => undefined,
     }
     const windowValue = {
+        XMLHttpRequest: FakeXhr,
         fetch: fetchImpl,
         history,
         location,
@@ -59,6 +87,163 @@ const readIngestRequest = (args: Parameters<BrowserFetch> | undefined): Promise<
     args === undefined ? Promise.resolve(null) : (new Request(...args).json() as Promise<BrowserIngestRequest>)
 
 describe('InkronikBrowserClient fetch tracing', () => {
+    test('traces default XHR clients, reuses instances, preserves wire data and skips unrelated or already traced calls', async () => {
+        const batches: Array<BrowserIngestRequest> = []
+        const fetchImpl: BrowserFetch = async (input, init) => {
+            batches.push((await new Request(input, init).json()) as BrowserIngestRequest)
+            return new Response(null, { status: 202 })
+        }
+        const { restore } = installBrowserGlobals(fetchImpl, () => 10)
+        const originalSend: unknown = Reflect.get(FakeXhr.prototype, 'send')
+        const client = new InkronikBrowserClient({
+            publicKey: 'test',
+            collectorUrl: 'https://collector.example.com',
+            environment: 'development',
+            tracePropagationOrigins: ['https://api.example.com', 'https://collector.example.com'],
+            flushIntervalMs: 0,
+        })
+        try {
+            const request = new FakeXhr()
+            request.open('POST', 'https://api.example.com/orders/123456?token=QUERY_SECRET')
+            request.setRequestHeader('Content-Type', 'application/json')
+            const body = '{"password":"BODY_SECRET"}'
+            request.send(body)
+            const firstHeader = request.headers.get('traceparent')
+            request.readyState = 4
+            request.dispatchEvent(new Event('readystatechange'))
+            await client.flush()
+            expect(batches.flatMap(batch => batch.spans).filter(span => span.span_kind === 'client')).toHaveLength(1)
+            request.finish(200)
+            request.finish(200)
+            expect(request.body).toBe(body)
+            expect(request.headers.get('content-type')).toBe('application/json')
+            request.open('GET', '/status')
+            request.send(undefined)
+            const secondHeader = request.headers.get('traceparent')
+            request.finish(503)
+            ;['https://other.example.com/orders', 'https://collector.example.com/v1/browser/batch'].forEach(url => {
+                request.open('GET', url)
+                request.send(undefined)
+                request.finish(200)
+                expect(request.headers.has('traceparent')).toBe(false)
+            })
+            request.open('GET', 'https://api.example.com/orders')
+            const existingHeader = `00-${'a'.repeat(32)}-${'b'.repeat(16)}-01`
+            request.setRequestHeader('TraceParent', existingHeader)
+            request.send(undefined)
+            request.finish(200)
+            expect(request.headers.get('traceparent')).toBe(existingHeader)
+            await client.flush()
+            const spans = batches.flatMap(batch => batch.spans).filter(span => span.span_kind === 'client')
+            expect(spans).toHaveLength(2)
+            expect(firstHeader).toBe(`00-${spans[0]?.trace_id}-${spans[0]?.span_id}-01`)
+            expect(secondHeader).toBe(`00-${spans[1]?.trace_id}-${spans[1]?.span_id}-01`)
+            expect(spans[1]?.status_code).toBe('error')
+            expect(JSON.stringify(spans)).not.toContain('SECRET')
+            expect(JSON.stringify(spans)).not.toContain('password')
+            await client.shutdown()
+            expect(Reflect.get(FakeXhr.prototype, 'send') === originalSend).toBe(true)
+        } finally {
+            await client.shutdown()
+            restore()
+        }
+    })
+
+    test('fetch implemented over XHR keeps a single wire header and client span', async () => {
+        const batches: Array<BrowserIngestRequest> = []
+        const xhr = new FakeXhr()
+        const fetchImpl: BrowserFetch = async (input, init) => {
+            const request = new Request(input, init)
+            if (request.url.startsWith('https://collector.example.com')) {
+                batches.push((await request.json()) as BrowserIngestRequest)
+                return new Response(null, { status: 202 })
+            }
+            xhr.open(request.method, request.url)
+            request.headers.forEach((value, key) => xhr.setRequestHeader(key, value))
+            xhr.send(undefined)
+            xhr.finish(200)
+            return new Response('{}')
+        }
+        const { windowValue, restore } = installBrowserGlobals(fetchImpl, () => 10)
+        const client = new InkronikBrowserClient({
+            publicKey: 'test',
+            collectorUrl: 'https://collector.example.com',
+            environment: 'development',
+            flushIntervalMs: 0,
+        })
+        try {
+            await windowValue.fetch('https://app.example.com/orders')
+            await client.flush()
+            const spans = batches.flatMap(batch => batch.spans).filter(span => span.span_kind === 'client')
+            expect(spans).toHaveLength(1)
+            expect(xhr.headers.get('traceparent')).toBe(`00-${spans[0]?.trace_id}-${spans[0]?.span_id}-01`)
+        } finally {
+            await client.shutdown()
+            restore()
+        }
+    })
+
+    test('records aborts and synchronous failures once, and removes pending callbacks at shutdown', async () => {
+        const batches: Array<BrowserIngestRequest> = []
+        const fetchImpl: BrowserFetch = async (input, init) => {
+            batches.push((await new Request(input, init).json()) as BrowserIngestRequest)
+            return new Response(null, { status: 202 })
+        }
+        const { restore } = installBrowserGlobals(fetchImpl, () => 10)
+        const client = new InkronikBrowserClient({
+            publicKey: 'test',
+            collectorUrl: 'https://collector.example.com',
+            environment: 'development',
+            flushIntervalMs: 0,
+        })
+        try {
+            const aborted = new FakeXhr()
+            aborted.open('GET', '/cancelled')
+            aborted.send(undefined)
+            aborted.finish(0)
+            const failing = new FakeXhr()
+            failing.open('GET', '/failing')
+            failing.isFailing = true
+            expect(() => failing.send(undefined)).toThrow('network failure')
+            failing.finish(0)
+            const pending = new FakeXhr()
+            pending.open('GET', '/pending')
+            pending.send(undefined)
+            pending.open('GET', '/reopened')
+            pending.send(undefined)
+            await client.shutdown()
+            pending.finish(200)
+            const spans = batches.flatMap(batch => batch.spans).filter(span => span.span_kind === 'client')
+            expect(spans).toHaveLength(3)
+            expect(spans.every(span => span.status_code === 'error')).toBe(true)
+        } finally {
+            await client.shutdown()
+            restore()
+        }
+    })
+
+    test.each([{ sampleRate: 0 }, { enableXhrTracing: false }])('respects disabled XHR telemetry: %j', async options => {
+        const fetchImpl: BrowserFetch = () => Promise.resolve(new Response(null, { status: 202 }))
+        const { restore } = installBrowserGlobals(fetchImpl, () => 0)
+        const client = new InkronikBrowserClient({
+            publicKey: 'test',
+            collectorUrl: 'https://collector.example.com',
+            environment: 'development',
+            ...options,
+            flushIntervalMs: 0,
+        })
+        try {
+            const request = new FakeXhr()
+            request.open('GET', '/status')
+            request.send(undefined)
+            request.finish(200)
+            expect(request.headers.has('traceparent')).toBe(false)
+        } finally {
+            await client.shutdown()
+            restore()
+        }
+    })
+
     test('rejects a malformed deployment environment during initialization', () => {
         expect(
             () =>

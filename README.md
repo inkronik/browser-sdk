@@ -79,6 +79,18 @@ Create the integration only after the application's consent policy permits telem
 browser: use only the Browser Source public key here, never the server ingest API key. The root package remains appropriate for older Next.js
 versions and other SPA routers; its History integration ignores `pushState` and `replaceState` calls that do not change the URL.
 
+## HTTP clients and trace propagation
+
+The SDK automatically instruments both `fetch` and `XMLHttpRequest`, including Axios's default browser adapter. Client applications do not need
+to switch Axios adapters or add tracing interceptors. Same-origin requests are traced automatically; `tracePropagationOrigins` adds exact trusted
+API origins. The API must allow the `traceparent` header in its CORS policy and preserve it through proxies to the server SDK.
+
+Each observed request sends the same trace/span identifiers that are recorded in its client span. Existing `traceparent` headers are preserved
+without appending another header or creating a duplicate XHR span. Collector traffic and non-allowlisted destinations are excluded. The SDK
+does not read XHR request bodies, response bodies or arbitrary headers. Aborts, timeouts and network failures preserve the host API behavior.
+Set `enableXhrTracing: false` to disable XHR instrumentation, independently of `enableFetchTracing`. Shutdown restores the instrumented host
+methods and removes pending XHR completion listeners.
+
 ## Identity and privacy
 
 Use one stable, opaque user ID across the browser and backend, ideally the authentication `sub` or UUID. Matching identifiers let RUM, product

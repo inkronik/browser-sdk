@@ -22,6 +22,7 @@ export interface CreateInkronikBrowserOptions {
     readonly sanitizeUrl?: BrowserUrlSanitizer
     readonly user?: SetUserInput
     readonly enableFetchTracing?: boolean
+    readonly enableXhrTracing?: boolean
     readonly enableNavigationTracking?: boolean
     readonly tracePropagationOrigins?: ReadonlyArray<string>
 }
@@ -188,6 +189,8 @@ export interface BrowserInstrumentationInput {
     readonly beginView: (name: string) => void
     readonly traceFetch: BrowserFetch
     readonly enableFetchTracing: boolean
+    readonly enableXhrTracing: boolean
+    readonly startXhrTrace: (input: BrowserRequestTraceInput) => BrowserXhrTrace | undefined
     readonly enableNavigationTracking: boolean
 }
 
@@ -218,10 +221,38 @@ export interface BuildBrowserSpanInput {
     readonly attributes?: BrowserAttributes
 }
 
-export interface CompleteBrowserFetchSpanInput {
+export interface BrowserRequestTraceInput {
+    readonly transport: 'fetch' | 'xhr'
+    readonly method: string
+    readonly url: URL
+}
+
+export interface BrowserXhrTraceResult {
+    readonly status: number
+    readonly error?: unknown
+}
+
+export interface BrowserXhrTrace {
+    readonly traceparent: string
+    readonly complete: (result: BrowserXhrTraceResult) => void
+}
+
+export interface BrowserXhrState {
+    readonly request: BrowserRequestTraceInput
+    readonly hasTraceparent: boolean
+    readonly cleanup?: () => void
+    readonly cancel?: () => void
+}
+
+export interface ResolveBrowserXhrRequestInput {
+    readonly args: ReadonlyArray<unknown>
+    readonly input: BrowserInstrumentationInput
+}
+
+export interface CompleteBrowserRequestSpanInput {
     readonly context: BrowserTraceContext
     readonly viewContext: BrowserViewContext
-    readonly request: Request
+    readonly request: BrowserRequestTraceInput
     readonly startedAt: number
     readonly timestamp: string
     readonly pageUrl: string
@@ -229,8 +260,14 @@ export interface CompleteBrowserFetchSpanInput {
     readonly userId: string
     readonly sessionId: string
     readonly attributes: BrowserAttributes
-    readonly response?: Response
+    readonly status: number
     readonly error?: unknown
+}
+
+// Preserve the previously exported fetch completion shape for existing type imports.
+export interface CompleteBrowserFetchSpanInput extends Omit<CompleteBrowserRequestSpanInput, 'request' | 'status'> {
+    readonly request: Request
+    readonly response?: Response
 }
 
 export interface BrowserTransportBatch {
