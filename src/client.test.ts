@@ -154,7 +154,7 @@ describe('InkronikBrowserClient fetch tracing', () => {
         const xhr = new FakeXhr()
         const fetchImpl: BrowserFetch = async (input, init) => {
             const request = new Request(input, init)
-            if (request.url.startsWith('https://collector.example.com')) {
+            if (new URL(request.url).origin === 'https://collector.example.com') {
                 batches.push((await request.json()) as BrowserIngestRequest)
                 return new Response(null, { status: 202 })
             }
@@ -263,7 +263,7 @@ describe('InkronikBrowserClient fetch tracing', () => {
             fetchReceivers.push(this)
             const request = new Request(input, init)
 
-            if (request.url.startsWith('https://collector.example.com/')) {
+            if (new URL(request.url).origin === 'https://collector.example.com') {
                 collectorRequests.push(request)
 
                 return Promise.resolve(new Response(null, { status: 202 }))
