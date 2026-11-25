@@ -105,6 +105,8 @@ The SDK:
 
 - never reads form values, DOM text, request bodies, cookies, clipboard data, or arbitrary storage contents;
 - strips URL credentials, query strings, fragments, and identifier-like route segments before transport;
+- replaces JWT-bearing path segments with `:redacted` in page URLs, routes, and request URLs, including percent-encoded segments;
+- redacts tokens before applying telemetry text limits, so long tokens are not copied as unrecognized fragments into span names or attributes;
 - keeps its bounded telemetry queue in memory;
 - persists only an anonymous session UUID and activity timestamps in `localStorage`, and falls back to an in-memory session when storage is
   unavailable;
@@ -114,6 +116,13 @@ The SDK always applies its baseline URL privacy sanitization before and after th
 URL with credentials, query strings, fragments, and identifier-like path segments already removed, and can apply additional path redaction. If the
 callback throws or returns an empty, invalid, or non-HTTP(S) URL, the SDK omits the page URL rather than falling back to the original value. This is
 structural data minimization, not general secret detection: applications should still avoid putting sensitive data in URL paths.
+
+For example, `/receipt/<jwt>` and `/sales-session-report/<jwt>` become `/receipt/:redacted` and `/sales-session-report/:redacted`. This baseline
+applies to navigation, Fetch and XHR telemetry without application-specific configuration. The actual request URL is unchanged. Malformed encoded
+segments, or encoding nested beyond the bounded decoder, are omitted as `:redacted`. Redaction affects newly captured telemetry; it does not
+rewrite historical events already stored by a Collector.
+
+Individual path segments and freeform values above 16 KiB are replaced with a redaction marker rather than scanned or forwarded as partial text.
 
 ## Distributed tracing
 

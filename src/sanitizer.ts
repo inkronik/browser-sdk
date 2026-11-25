@@ -4,8 +4,10 @@ import {
     MAX_ATTRIBUTES,
     MAX_ATTRIBUTE_KEY_LENGTH,
     MAX_ATTRIBUTE_VALUE_LENGTH,
+    MAX_REDACTION_INPUT_LENGTH,
     PHONE_PATTERN,
     REDACTED_VALUE,
+    ROUTE_JWT_SEGMENT_PATTERN,
     ROUTE_NUMERIC_SEGMENT_PATTERN,
     ROUTE_OBJECT_ID_SEGMENT_PATTERN,
     ROUTE_ULID_SEGMENT_PATTERN,
@@ -27,11 +29,13 @@ export const isSensitiveBrowserKey = (key: string): boolean => {
 }
 
 export const redactBrowserValue = (value: string): string =>
-    value
-        .replaceAll(TOKEN_PATTERN, REDACTED_VALUE)
-        .replaceAll(EMAIL_PATTERN, REDACTED_VALUE)
-        .replaceAll(PHONE_PATTERN, REDACTED_VALUE)
-        .replaceAll(CARD_PATTERN, REDACTED_VALUE)
+    value.length > MAX_REDACTION_INPUT_LENGTH
+        ? REDACTED_VALUE
+        : value
+              .replaceAll(TOKEN_PATTERN, REDACTED_VALUE)
+              .replaceAll(EMAIL_PATTERN, REDACTED_VALUE)
+              .replaceAll(PHONE_PATTERN, REDACTED_VALUE)
+              .replaceAll(CARD_PATTERN, REDACTED_VALUE)
 
 export const redactBrowserErrorValue = (value: string): string => redactBrowserValue(value).replaceAll(freeformSecretPattern, `$1${REDACTED_VALUE}`)
 
@@ -56,7 +60,7 @@ const sanitizeValue = ({ key, value }: { readonly key: string; readonly value: B
         }
     }
 
-    return redactBrowserValue(value.slice(0, MAX_ATTRIBUTE_VALUE_LENGTH))
+    return redactBrowserValue(value).slice(0, MAX_ATTRIBUTE_VALUE_LENGTH)
 }
 
 export const sanitizeBrowserAttributes = (attributes: BrowserAttributes): BrowserAttributes =>
@@ -100,11 +104,36 @@ const isIdentifierRouteSegment = (segment: string): boolean =>
     ROUTE_OBJECT_ID_SEGMENT_PATTERN.test(segment) ||
     ROUTE_NUMERIC_SEGMENT_PATTERN.test(segment)
 
-export const sanitizeBrowserRoute = (value: string): string => {
-    const path = value.split(/[?#]/u).at(0)?.slice(0, 500) ?? ''
+const decodeRouteSegment = (segment: string): string | undefined => {
+    try {
+        const decoded = Array.from({ length: 3 }).reduce<string>(value => (value.includes('%') ? decodeURIComponent(value) : value), segment)
+        // Do not forward segments still nested beyond the decoding bound.
+        return /%[0-9a-f]{2}/iu.test(decoded) ? undefined : decoded
+    } catch {
+        return undefined
+    }
+}
 
-    return path
-        .split('/')
-        .map(segment => (isIdentifierRouteSegment(segment) ? ':id' : segment))
-        .join('/')
+const isJwtRouteSegment = (segment: string): boolean => {
+    if (!ROUTE_JWT_SEGMENT_PATTERN.test(segment)) return false
+    const header = segment.split('.').at(0) ?? ''
+    try {
+        const parsed: unknown = JSON.parse(atob(header.replaceAll('-', '+').replaceAll('_', '/')))
+        return typeof parsed === 'object' && parsed !== null && 'alg' in parsed && typeof parsed.alg === 'string'
+    } catch {
+        return false
+    }
+}
+
+const sanitizeRouteSegment = (segment: string): string => {
+    if (segment.length > MAX_REDACTION_INPUT_LENGTH) return ':redacted'
+    const decoded = decodeRouteSegment(segment)
+    if (decoded === undefined || isJwtRouteSegment(decoded) || decoded.match(TOKEN_PATTERN) !== null) return ':redacted'
+    return isIdentifierRouteSegment(decoded) ? ':id' : segment
+}
+
+export const sanitizeBrowserRoute = (value: string): string => {
+    const path = value.split(/[?#]/u).at(0) ?? ''
+
+    return path.split('/').map(sanitizeRouteSegment).join('/').slice(0, 500)
 }

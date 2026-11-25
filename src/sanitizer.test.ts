@@ -1,7 +1,57 @@
 import { describe, expect, mock, test } from 'bun:test'
 import { createPrivacyPreservingUrlSanitizer, sanitizeBrowserAttributes, sanitizeBrowserRoute, sanitizeBrowserUrl } from './sanitizer.js'
+import { createSyntheticJwt, encodeSyntheticToken } from './testing/jwt.js'
 
 describe('browser SDK sanitization', () => {
+    test.each([0, 800, 4000])('redacts entire JWT path segments before applying the route limit: padding=%i', padding => {
+        const token = createSyntheticJwt(padding)
+        ;['receipt', 'sales-session-report'].forEach(route => {
+            const path = `/${route}/${token}/download`
+            expect(sanitizeBrowserRoute(path)).toBe(`/${route}/:redacted/download`)
+            expect(sanitizeBrowserUrl(`https://app.example.com${path}?token=QUERY_SECRET#private`)).toBe(
+                `https://app.example.com/${route}/:redacted/download`,
+            )
+        })
+    })
+
+    test('redacts encoded JWT segments, including nested encoding, without decoding ordinary route labels', () => {
+        const token = createSyntheticJwt(0)
+        ;[1, 2, 5]
+            .map(depth => encodeSyntheticToken(token, depth))
+            .forEach(value => {
+                expect(sanitizeBrowserRoute(`/receipt/${value}`)).toBe('/receipt/:redacted')
+            })
+        expect(sanitizeBrowserRoute('/teams/platform%20engineering/v1.2.3')).toBe('/teams/platform%20engineering/v1.2.3')
+        expect(sanitizeBrowserRoute(`/receipt/${token}%ZZ`)).toBe('/receipt/:redacted')
+    })
+
+    test('recognizes JWT JSON headers without relying on the eyJ prefix and masks unsigned tokens', () => {
+        const token = `${btoa(' { "alg": "none" }').replaceAll('=', '')}.e30.`
+        expect(sanitizeBrowserRoute(`/receipt/${token}`)).toBe('/receipt/:redacted')
+        expect(sanitizeBrowserRoute('/releases/v1.2.3')).toBe('/releases/v1.2.3')
+    })
+
+    test('omits oversized values instead of scanning unbounded text or exposing a truncated token', () => {
+        const token = createSyntheticJwt(20_000)
+        expect(sanitizeBrowserRoute(`/receipt/${token}/download`)).toBe('/receipt/:redacted/download')
+        expect(sanitizeBrowserAttributes({ operation: token })).toEqual({ operation: '[REDACTED]' })
+    })
+
+    test('a custom sanitizer receives redacted paths and cannot reintroduce a token', () => {
+        const token = createSyntheticJwt(0)
+        const customSanitizer = mock((url: URL) => `${url.origin}/sales-session-report/${token}`)
+        const sanitizeUrl = createPrivacyPreservingUrlSanitizer(customSanitizer)
+        expect(sanitizeUrl(new URL(`https://app.example.com/receipt/${token}`))).toBe('https://app.example.com/sales-session-report/:redacted')
+        expect(customSanitizer.mock.calls.at(0)?.at(0)?.pathname).toBe('/receipt/:redacted')
+    })
+
+    test('redacts values before their length limit can split a token', () => {
+        const token = createSyntheticJwt(800)
+        expect(sanitizeBrowserAttributes({ operation: `GET /receipt/${token}`, target_url: `https://app.example.com/receipt/${token}` })).toEqual({
+            operation: 'GET /receipt/[REDACTED]',
+            target_url: 'https://app.example.com/receipt/:redacted',
+        })
+    })
     test('never forwards input-like or secret attributes', () => {
         const sanitized = sanitizeBrowserAttributes({
             input_value: 'FORM_SECRET',

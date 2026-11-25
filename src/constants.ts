@@ -17,6 +17,7 @@ export const MAX_ATTRIBUTE_KEY_LENGTH = 64
 export const MAX_ATTRIBUTE_VALUE_LENGTH = 512
 export const MAX_EVENT_MESSAGE_LENGTH = 1024
 export const MAX_ERROR_VALUE_LENGTH = 4096
+export const MAX_REDACTION_INPUT_LENGTH = 16_384
 export const INKRONIK_ORIGINAL_BROWSER_FETCH = Symbol.for('inkronik.browser.originalFetch')
 
 export const SENSITIVE_KEY_FRAGMENTS = [
@@ -48,3 +49,4 @@ export const ROUTE_UUID_SEGMENT_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f
 export const ROUTE_ULID_SEGMENT_PATTERN = /^[0-9A-HJKMNP-TV-Z]{26}$/iu
 export const ROUTE_OBJECT_ID_SEGMENT_PATTERN = /^[0-9a-f]{24}$/iu
 export const ROUTE_NUMERIC_SEGMENT_PATTERN = /^\d+$/u
+export const ROUTE_JWT_SEGMENT_PATTERN = /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]*$/u

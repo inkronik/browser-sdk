@@ -48,10 +48,10 @@ export const normalizeCapturedBrowserError = (error: unknown): CapturedError => 
     const errorStack = errorProperty({ error, property: 'stack' })
 
     return {
-        type: redactBrowserValue(errorType.slice(0, 255)),
-        message: redactBrowserErrorValue(errorMessage.slice(0, MAX_ERROR_VALUE_LENGTH)),
-        stack: redactBrowserErrorValue(errorStack.slice(0, MAX_ERROR_VALUE_LENGTH)),
-        code: redactBrowserValue(errorProperty({ error, property: 'code' }).slice(0, 255)),
+        type: redactBrowserValue(errorType).slice(0, 255),
+        message: redactBrowserErrorValue(errorMessage).slice(0, MAX_ERROR_VALUE_LENGTH),
+        stack: redactBrowserErrorValue(errorStack).slice(0, MAX_ERROR_VALUE_LENGTH),
+        code: redactBrowserValue(errorProperty({ error, property: 'code' })).slice(0, 255),
         handled: true,
     }
 }
@@ -119,7 +119,7 @@ export const resolveBrowserFetch = ({ configuredFetch, environment }: ResolveBro
 }
 
 export const normalizeBrowserUserContext = (input: SetUserInput): NormalizedBrowserUserContext => ({
-    id: redactBrowserValue(input.id.slice(0, 255)),
+    id: redactBrowserValue(input.id).slice(0, 255),
     attributes: sanitizeBrowserAttributes(Object.fromEntries(Object.entries(input.attributes ?? {}).map(([key, value]) => [`user.${key}`, value]))),
 })
 
@@ -149,15 +149,15 @@ export const buildBrowserEvent = ({
 }: BuildBrowserEventInput): BrowserEvent => ({
     event_id: createUuid(),
     event_type: eventType,
-    name: name.slice(0, 100),
+    name: redactBrowserValue(name).slice(0, 100),
     level: level ?? (eventType === 'javascript_error' || eventType === 'unhandled_rejection' ? 'error' : 'info'),
-    message: redactBrowserErrorValue((message ?? '').slice(0, MAX_EVENT_MESSAGE_LENGTH)),
+    message: redactBrowserErrorValue(message ?? '').slice(0, MAX_EVENT_MESSAGE_LENGTH),
     timestamp: new Date().toISOString(),
     session_id: sessionId,
     view_id: viewId,
     page_url: pageUrl,
     route: sanitizeBrowserRoute(route),
-    user_id: redactBrowserValue(userId.slice(0, 255)),
+    user_id: redactBrowserValue(userId).slice(0, 255),
     trace_id: traceId,
     span_id: spanId,
     error_type: error?.type ?? '',
@@ -196,19 +196,19 @@ export const buildBrowserSpan = ({
     trace_id: context.traceId,
     span_id: context.spanId,
     parent_span_id: context.parentSpanId,
-    name: redactBrowserValue(name.slice(0, 100)),
+    name: redactBrowserValue(name).slice(0, 100),
     timestamp,
     end_time: endTime,
     duration_us: Math.max(0, Math.round(durationUs)),
     span_kind: spanKind,
     span_category: spanCategory,
     status_code: statusCode,
-    status_message: statusMessage === undefined ? '' : redactBrowserValue(statusMessage.slice(0, 512)),
+    status_message: statusMessage === undefined ? '' : redactBrowserValue(statusMessage).slice(0, 512),
     session_id: sessionId,
     view_id: viewId,
     page_url: pageUrl,
     route: sanitizeBrowserRoute(route),
-    user_id: redactBrowserValue(userId.slice(0, 255)),
+    user_id: redactBrowserValue(userId).slice(0, 255),
     http_method: httpMethod?.slice(0, 16) ?? '',
     http_url: httpUrl === undefined ? '' : sanitizeBrowserUrl(httpUrl),
     http_status_code: httpStatusCode ?? 0,
