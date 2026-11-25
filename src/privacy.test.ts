@@ -2,7 +2,7 @@
 import { describe, expect, test } from 'bun:test'
 import { InkronikBrowserClient } from './client.js'
 import { FakeXhr, installBrowserGlobals } from './testing/browser.js'
-import { createSyntheticJwt } from './testing/jwt.js'
+import { createSyntheticJwt, encodeSyntheticToken } from './testing/jwt.js'
 import type { BrowserFetch, BrowserIngestRequest } from './types.js'
 
 describe('default Browser SDK JWT privacy at the transport boundary', () => {
@@ -10,7 +10,7 @@ describe('default Browser SDK JWT privacy at the transport boundary', () => {
         'redacts %s tokens for initial views, navigation, Fetch and XHR without changing wire URLs',
         async route => {
             const token = createSyntheticJwt(800)
-            const encodedToken = Array.from(token, character => `%${character.charCodeAt(0).toString(16)}`).join('')
+            const encodedToken = encodeSyntheticToken(token, 1)
             const batches: Array<BrowserIngestRequest> = []
             const apiUrls: Array<string> = []
             const fetchImpl: BrowserFetch = async (input, init) => {

@@ -1,6 +1,6 @@
 import { describe, expect, mock, test } from 'bun:test'
 import { createPrivacyPreservingUrlSanitizer, sanitizeBrowserAttributes, sanitizeBrowserRoute, sanitizeBrowserUrl } from './sanitizer.js'
-import { createSyntheticJwt } from './testing/jwt.js'
+import { createSyntheticJwt, encodeSyntheticToken } from './testing/jwt.js'
 
 describe('browser SDK sanitization', () => {
     test.each([0, 800, 4000])('redacts entire JWT path segments before applying the route limit: padding=%i', padding => {
@@ -16,11 +16,11 @@ describe('browser SDK sanitization', () => {
 
     test('redacts encoded JWT segments, including nested encoding, without decoding ordinary route labels', () => {
         const token = createSyntheticJwt(0)
-        const encoded = Array.from(token, character => `%${character.charCodeAt(0).toString(16)}`).join('')
-        const nested = encoded.replaceAll('%', '%25')
-        ;[encoded, nested, nested.replaceAll('%', '%252525')].forEach(value => {
-            expect(sanitizeBrowserRoute(`/receipt/${value}`)).toBe('/receipt/:redacted')
-        })
+        ;[1, 2, 5]
+            .map(depth => encodeSyntheticToken(token, depth))
+            .forEach(value => {
+                expect(sanitizeBrowserRoute(`/receipt/${value}`)).toBe('/receipt/:redacted')
+            })
         expect(sanitizeBrowserRoute('/teams/platform%20engineering/v1.2.3')).toBe('/teams/platform%20engineering/v1.2.3')
         expect(sanitizeBrowserRoute(`/receipt/${token}%ZZ`)).toBe('/receipt/:redacted')
     })
