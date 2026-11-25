@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import {
     buildBrowserEvent,
+    buildBrowserSpan,
     deterministicSample,
     normalizeBrowserUserContext,
     normalizeCapturedBrowserError,
@@ -8,8 +9,54 @@ import {
     normalizeTelemetryEnvironment,
     shouldTraceBrowserRequest,
 } from './utils.js'
+import { createSyntheticJwt } from './testing/jwt.js'
 
 describe('browser SDK event construction', () => {
+    test('redacts tokens before truncating event names, span names, identities and error details', () => {
+        const token = createSyntheticJwt(4000)
+        const event = buildBrowserEvent({
+            eventType: 'custom',
+            name: token,
+            message: token,
+            pageUrl: 'https://app.example.com',
+            route: '/',
+            sessionId: 'session',
+            viewId: 'view',
+            userId: token,
+            traceId: 'a'.repeat(32),
+            spanId: 'b'.repeat(16),
+            defaultAttributes: {},
+        })
+        const span = buildBrowserSpan({
+            context: { traceId: 'a'.repeat(32), spanId: 'b'.repeat(16), parentSpanId: '' },
+            name: `GET /receipt/${token}`,
+            durationUs: 1,
+            endTime: new Date().toISOString(),
+            timestamp: new Date().toISOString(),
+            spanCategory: 'http',
+            spanKind: 'client',
+            statusCode: 'error',
+            statusMessage: token,
+            pageUrl: 'https://app.example.com',
+            route: '/',
+            sessionId: 'session',
+            viewId: 'view',
+            userId: token,
+        })
+        const error = normalizeCapturedBrowserError(Object.assign(new Error(token), { name: token, code: token }))
+        expect(event.name).toBe('[REDACTED]')
+        expect(event.message).toBe('[REDACTED]')
+        expect(event.user_id).toBe('[REDACTED]')
+        expect(span.name).toBe('GET /receipt/[REDACTED]')
+        expect(span.status_message).toBe('[REDACTED]')
+        expect(span.user_id).toBe('[REDACTED]')
+        expect(error.type).toBe('[REDACTED]')
+        expect(error.message).toBe('[REDACTED]')
+        expect(error.code).toBe('[REDACTED]')
+        expect(error.stack).toContain('[REDACTED]')
+        expect(normalizeBrowserUserContext({ id: token }).id).toBe('[REDACTED]')
+        expect(JSON.stringify({ event, span, error })).not.toContain(token.slice(0, 40))
+    })
     test('normalizes a deployment environment to its canonical telemetry slug', () => {
         expect(normalizeTelemetryEnvironment(' Development ')).toBe('development')
         expect(() => normalizeTelemetryEnvironment('production/eu')).toThrow(TypeError)

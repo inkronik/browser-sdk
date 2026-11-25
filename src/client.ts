@@ -416,7 +416,7 @@ export class InkronikBrowserClient {
         this.enqueueSpan(
             buildBrowserSpan({
                 context: input.context,
-                name: `${input.request.method} ${requestUrl.pathname}`,
+                name: `${input.request.method} ${sanitizeBrowserRoute(requestUrl.pathname)}`,
                 timestamp: input.timestamp,
                 endTime: new Date().toISOString(),
                 durationUs: Math.max(0, (this.environment?.performance.now() ?? input.startedAt) - input.startedAt) * 1000,
